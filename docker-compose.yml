@@ -1,0 +1,22 @@
+services:
+  app:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    depends_on:
+      - ollama
+
+  # LLM local pour les débriefs (étape 5). Pour un GPU NVIDIA, ajoutez
+  # une section `deploy.resources.reservations.devices` (voir la doc Ollama).
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  ollama_data:

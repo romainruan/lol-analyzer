@@ -1,0 +1,105 @@
+# lol-analyzer
+
+Analyse de parties de League of Legends : collecte via l'API Riot, modèle de
+probabilité de victoire (Scikit-learn), moments clés, puis débrief généré par un
+LLM local (Ollama). Le tout conteneurisé avec Docker.
+
+> Projet personnel, non affilié à Riot Games. Ne publiez ni votre clé API ni de
+> données personnelles de joueurs.
+
+## État d'avancement
+
+- [x] Client API avec rate limiting (`src/riot_client.py`)
+- [x] Collecte des parties et timelines (`src/collect.py`)
+- [x] Features à 5/10/15/20/25 min, sans fuite de données (`src/features.py`)
+- [x] Construction du jeu de données (`src/build_dataset.py`)
+- [x] Features par lane, dont mid contre mid (`src/features.py`)
+- [x] Entraînement et évaluation par minute, validation croisée par partie (`src/train.py`)
+- [x] Repères du rôle mid et comparaison avec vos parties (`src/benchmarks.py`)
+- [ ] Interprétation (SHAP) et courbe de probabilité de victoire / moments clés
+- [ ] Débrief par LLM local (Ollama)
+- [ ] Interface Streamlit
+
+## Démarrage
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env        # puis collez votre clé Riot dans .env
+python -m pytest -q         # les tests ne nécessitent pas de clé
+```
+
+### 1. Collecter des données
+
+```bash
+# vos parties classées
+python -m src.collect --riot-id "VotrePseudo#EUW" --count 30
+
+# un échantillon de votre tranche de rang (ex. Gold II) pour entraîner le modèle
+python -m src.collect --tier GOLD --division II --pages 2 --per-player 5
+```
+
+Une partie + sa timeline = 2 requêtes, et la clé de dev autorise ~100 requêtes
+par 2 minutes : 1 000 parties prennent environ 40 minutes. Les téléchargements
+sont repris là où ils se sont arrêtés.
+
+### 2. Construire le tableau d'entraînement
+
+```bash
+python -m src.build_dataset --raw-dir data/raw/sample --out data/dataset.csv
+```
+
+Chaque ligne est une partie vue à une minute donnée (écarts d'or, d'XP, de CS,
+de kills, de tours, d'objectifs et de wards entre l'équipe bleue et la rouge),
+la cible étant `blue_win`.
+
+### 3. Entraîner et évaluer
+
+```bash
+python -m src.train --data data/dataset.csv --out results
+```
+
+Un modèle par minute (5, 10, 15, 20, 25), évalué hors échantillon avec une
+validation croisée **par partie**. Trois modèles sont comparés : régression
+logistique sur les écarts d'équipe, gradient boosting, et régression logistique
+avec l'écart d'or de chaque lane. Sorties dans `results/` :
+`metrics_by_minute.csv`, `auc_by_minute.png` (AUC avec intervalle de confiance
+bootstrap), `lane_coefficients.csv` (poids de chaque lane) et `calibration.csv`.
+
+### 4. Repères mid et comparaison avec vos parties
+
+```bash
+python -m src.benchmarks --raw-dir data/raw/sample --me-dir data/raw/me
+```
+
+Affiche les percentiles des mid laners de l'échantillon (CS/min, vision/min, KDA,
+participation aux kills, part des dégâts, CS/or/XP à 10 min) et situe vos propres
+parties en mid par rapport à eux. `collect --riot-id` enregistre votre puuid dans
+`data/raw/me/puuid.txt` pour retrouver vos parties.
+
+### Avec Docker
+
+```bash
+docker compose build
+docker compose run --rm app python -m src.collect --riot-id "VotrePseudo#EUW"
+```
+
+## Points de rigueur
+
+- Découper train/test **par partie** (jamais deux minutes d'une même partie des
+  deux côtés), idéalement par patch ou par date.
+- Mesurer AUC, log-loss et calibration, pas seulement la précision.
+- Vérifier chaque débrief LLM : un modèle local peut inventer un chiffre.
+
+## Limites connues
+
+- Les modèles de minutes tardives n'utilisent que les parties assez longues
+  (biais de survie) : comparer les minutes entre elles demande de la prudence.
+- Quelques centaines de parties donnent des intervalles de confiance larges ;
+  les différences de quelques points d'AUC entre modèles ne sont pas significatives.
+- Les poids du modèle « lanes » sont des corrélations, pas des effets causaux :
+  les lanes d'une même équipe sont corrélées entre elles.
+- Données issues d'un seul niveau de jeu (Master) : ne pas généraliser aux autres rangs.
+- `league-v4/entries` ne couvre que IRON à DIAMOND ; Master et au-delà utilisent
+  d'autres endpoints.
+- La clé de développement expire toutes les 24 h.
