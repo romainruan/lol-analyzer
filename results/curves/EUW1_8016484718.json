@@ -1,0 +1,159 @@
+{
+  "match_id": "EUW1_8016484718",
+  "perspective": {
+    "team": "rouge",
+    "champion": "Syndra",
+    "role": "MIDDLE",
+    "result": "victoire"
+  },
+  "curve": [
+    {
+      "minute": 2,
+      "win_prob": 0.422
+    },
+    {
+      "minute": 3,
+      "win_prob": 0.387
+    },
+    {
+      "minute": 4,
+      "win_prob": 0.621
+    },
+    {
+      "minute": 5,
+      "win_prob": 0.561
+    },
+    {
+      "minute": 6,
+      "win_prob": 0.63
+    },
+    {
+      "minute": 7,
+      "win_prob": 0.71
+    },
+    {
+      "minute": 8,
+      "win_prob": 0.622
+    },
+    {
+      "minute": 9,
+      "win_prob": 0.64
+    },
+    {
+      "minute": 10,
+      "win_prob": 0.657
+    },
+    {
+      "minute": 11,
+      "win_prob": 0.687
+    },
+    {
+      "minute": 12,
+      "win_prob": 0.785
+    },
+    {
+      "minute": 13,
+      "win_prob": 0.776
+    },
+    {
+      "minute": 14,
+      "win_prob": 0.766
+    },
+    {
+      "minute": 15,
+      "win_prob": 0.696
+    },
+    {
+      "minute": 16,
+      "win_prob": 0.748
+    },
+    {
+      "minute": 17,
+      "win_prob": 0.8
+    },
+    {
+      "minute": 18,
+      "win_prob": 0.836
+    },
+    {
+      "minute": 19,
+      "win_prob": 0.833
+    },
+    {
+      "minute": 20,
+      "win_prob": 0.85
+    },
+    {
+      "minute": 21,
+      "win_prob": 0.873
+    },
+    {
+      "minute": 22,
+      "win_prob": 0.962
+    },
+    {
+      "minute": 23,
+      "win_prob": 0.965
+    },
+    {
+      "minute": 24,
+      "win_prob": 0.989
+    },
+    {
+      "minute": 25,
+      "win_prob": 0.976
+    },
+    {
+      "minute": 26,
+      "win_prob": 0.937
+    },
+    {
+      "minute": 27,
+      "win_prob": 0.968
+    },
+    {
+      "minute": 28,
+      "win_prob": 0.965
+    },
+    {
+      "minute": 29,
+      "win_prob": 0.989
+    }
+  ],
+  "turning_points": [
+    {
+      "minute": 4,
+      "win_prob_before": 0.387,
+      "win_prob_after": 0.621,
+      "events": [
+        "Sivir (alliés) tue Draven (ennemis)",
+        "Udyr (alliés) tue Katarina (ennemis)",
+        "Udyr (alliés) tue Shaco (ennemis)"
+      ]
+    },
+    {
+      "minute": 12,
+      "win_prob_before": 0.687,
+      "win_prob_after": 0.785,
+      "events": [
+        "Les alliés prennent le Dragon",
+        "Udyr (alliés) tue Katarina (ennemis)",
+        "Malphite (ennemis) tue Hwei (alliés)",
+        "Sivir (alliés) tue Draven (ennemis)",
+        "Draven (ennemis) tue Sivir (alliés)",
+        "Udyr (alliés) tue Shaco (ennemis)"
+      ]
+    },
+    {
+      "minute": 22,
+      "win_prob_before": 0.873,
+      "win_prob_after": 0.962,
+      "events": [
+        "Les alliés prennent Nashor",
+        "Udyr (alliés) tue Shaco (ennemis)",
+        "Sivir (alliés) tue Alistar (ennemis)",
+        "Hwei (alliés) tue Draven (ennemis)"
+      ]
+    }
+  ]
+}

@@ -16,7 +16,8 @@ LLM local (Ollama). Le tout conteneurisé avec Docker.
 - [x] Features par lane, dont mid contre mid (`src/features.py`)
 - [x] Entraînement et évaluation par minute, validation croisée par partie (`src/train.py`)
 - [x] Repères du rôle mid et comparaison avec vos parties (`src/benchmarks.py`)
-- [ ] Interprétation (SHAP) et courbe de probabilité de victoire / moments clés
+- [x] Courbe de probabilité de victoire par partie et moments clés (`src/winprob.py`)
+- [ ] Interprétation (SHAP)
 - [ ] Débrief par LLM local (Ollama)
 - [ ] Interface Streamlit
 
@@ -76,6 +77,26 @@ Affiche les percentiles des mid laners de l'échantillon (CS/min, vision/min, KD
 participation aux kills, part des dégâts, CS/or/XP à 10 min) et situe vos propres
 parties en mid par rapport à eux. `collect --riot-id` enregistre votre puuid dans
 `data/raw/me/puuid.txt` pour retrouver vos parties.
+
+### 5. Courbe de probabilité de victoire et moments clés
+
+```bash
+# une ligne par minute (2 à 40) au lieu de 5/10/15/20/25
+python -m src.build_dataset --raw-dir data/raw/sample --all-minutes --out data/dataset_all.csv
+python -m src.winprob train --data data/dataset_all.csv
+python -m src.winprob analyze --raw-dir data/raw/me --limit 5
+```
+
+Un seul modèle (régression logistique) sert pour toutes les minutes : le poids de
+chaque variable évolue avec le temps. Pour chaque partie analysée, `results/curves/`
+contient un graphique (probabilité de victoire minute par minute, vue de votre
+équipe) et un JSON avec les **moments clés** : les plus gros sauts de probabilité,
+associés aux événements de la minute (objectifs, tours, kills). Ce JSON est
+l'entrée du débrief par LLM : le modèle de langage ne lit jamais la timeline brute.
+
+Avertissement : un saut de probabilité n'est pas une cause. Il signale qu'un
+écart d'or, d'XP ou d'objectifs a bougé ; l'événement associé est le plus
+plausible, pas prouvé.
 
 ### Avec Docker
 

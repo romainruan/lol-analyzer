@@ -1,0 +1,137 @@
+{
+  "match_id": "EUW1_8017315091",
+  "perspective": {
+    "team": "rouge",
+    "champion": "Qiyana",
+    "role": "MIDDLE",
+    "result": "victoire"
+  },
+  "curve": [
+    {
+      "minute": 2,
+      "win_prob": 0.472
+    },
+    {
+      "minute": 3,
+      "win_prob": 0.459
+    },
+    {
+      "minute": 4,
+      "win_prob": 0.482
+    },
+    {
+      "minute": 5,
+      "win_prob": 0.411
+    },
+    {
+      "minute": 6,
+      "win_prob": 0.451
+    },
+    {
+      "minute": 7,
+      "win_prob": 0.561
+    },
+    {
+      "minute": 8,
+      "win_prob": 0.62
+    },
+    {
+      "minute": 9,
+      "win_prob": 0.625
+    },
+    {
+      "minute": 10,
+      "win_prob": 0.404
+    },
+    {
+      "minute": 11,
+      "win_prob": 0.425
+    },
+    {
+      "minute": 12,
+      "win_prob": 0.465
+    },
+    {
+      "minute": 13,
+      "win_prob": 0.372
+    },
+    {
+      "minute": 14,
+      "win_prob": 0.692
+    },
+    {
+      "minute": 15,
+      "win_prob": 0.545
+    },
+    {
+      "minute": 16,
+      "win_prob": 0.687
+    },
+    {
+      "minute": 17,
+      "win_prob": 0.679
+    },
+    {
+      "minute": 18,
+      "win_prob": 0.755
+    },
+    {
+      "minute": 19,
+      "win_prob": 0.873
+    },
+    {
+      "minute": 20,
+      "win_prob": 0.946
+    },
+    {
+      "minute": 21,
+      "win_prob": 0.975
+    },
+    {
+      "minute": 22,
+      "win_prob": 0.985
+    },
+    {
+      "minute": 23,
+      "win_prob": 0.982
+    },
+    {
+      "minute": 24,
+      "win_prob": 0.99
+    }
+  ],
+  "turning_points": [
+    {
+      "minute": 10,
+      "win_prob_before": 0.625,
+      "win_prob_after": 0.404,
+      "events": [
+        "Syndra (ennemis) tue Rakan (alliés)",
+        "Olaf (ennemis) tue Zaahen (alliés)",
+        "Syndra (ennemis) tue Qiyana (alliés)"
+      ]
+    },
+    {
+      "minute": 14,
+      "win_prob_before": 0.372,
+      "win_prob_after": 0.692,
+      "events": [
+        "Les alliés prennent le Dragon",
+        "Xayah (alliés) tue Jhin (ennemis)",
+        "Zyra (alliés) tue Sejuani (ennemis)",
+        "Syndra (ennemis) tue Xayah (alliés)",
+        "Zaahen (alliés) tue Syndra (ennemis)"
+      ]
+    },
+    {
+      "minute": 15,
+      "win_prob_before": 0.692,
+      "win_prob_after": 0.545,
+      "events": [
+        "Qiyana (alliés) tue Rell (ennemis)",
+        "Rell (ennemis) tue Zaahen (alliés)",
+        "Jhin (ennemis) tue Qiyana (alliés)"
+      ]
+    }
+  ]
+}

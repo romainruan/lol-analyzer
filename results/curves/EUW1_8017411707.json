@@ -1,0 +1,144 @@
+{
+  "match_id": "EUW1_8017411707",
+  "perspective": {
+    "team": "rouge",
+    "champion": "Qiyana",
+    "role": "MIDDLE",
+    "result": "défaite"
+  },
+  "curve": [
+    {
+      "minute": 2,
+      "win_prob": 0.579
+    },
+    {
+      "minute": 3,
+      "win_prob": 0.556
+    },
+    {
+      "minute": 4,
+      "win_prob": 0.53
+    },
+    {
+      "minute": 5,
+      "win_prob": 0.492
+    },
+    {
+      "minute": 6,
+      "win_prob": 0.496
+    },
+    {
+      "minute": 7,
+      "win_prob": 0.484
+    },
+    {
+      "minute": 8,
+      "win_prob": 0.544
+    },
+    {
+      "minute": 9,
+      "win_prob": 0.441
+    },
+    {
+      "minute": 10,
+      "win_prob": 0.244
+    },
+    {
+      "minute": 11,
+      "win_prob": 0.193
+    },
+    {
+      "minute": 12,
+      "win_prob": 0.221
+    },
+    {
+      "minute": 13,
+      "win_prob": 0.182
+    },
+    {
+      "minute": 14,
+      "win_prob": 0.232
+    },
+    {
+      "minute": 15,
+      "win_prob": 0.325
+    },
+    {
+      "minute": 16,
+      "win_prob": 0.2
+    },
+    {
+      "minute": 17,
+      "win_prob": 0.129
+    },
+    {
+      "minute": 18,
+      "win_prob": 0.05
+    },
+    {
+      "minute": 19,
+      "win_prob": 0.026
+    },
+    {
+      "minute": 20,
+      "win_prob": 0.016
+    },
+    {
+      "minute": 21,
+      "win_prob": 0.065
+    },
+    {
+      "minute": 22,
+      "win_prob": 0.093
+    },
+    {
+      "minute": 23,
+      "win_prob": 0.036
+    },
+    {
+      "minute": 24,
+      "win_prob": 0.023
+    },
+    {
+      "minute": 25,
+      "win_prob": 0.012
+    }
+  ],
+  "turning_points": [
+    {
+      "minute": 9,
+      "win_prob_before": 0.544,
+      "win_prob_after": 0.441,
+      "events": [
+        "Les alliés prennent des Larves du Néant",
+        "Les alliés prennent des Larves du Néant",
+        "Les alliés prennent des Larves du Néant",
+        "Les ennemis prennent le Dragon",
+        "LeeSin (ennemis) tue Zoe (alliés)"
+      ]
+    },
+    {
+      "minute": 10,
+      "win_prob_before": 0.441,
+      "win_prob_after": 0.244,
+      "events": [
+        "LeeSin (ennemis) tue Irelia (alliés)",
+        "Draven (ennemis) tue Caitlyn (alliés)",
+        "LeeSin (ennemis) tue Graves (alliés)"
+      ]
+    },
+    {
+      "minute": 16,
+      "win_prob_before": 0.325,
+      "win_prob_after": 0.2,
+      "events": [
+        "Les ennemis détruisent une tour",
+        "Viktor (ennemis) tue Caitlyn (alliés)",
+        "Jayce (ennemis) tue Irelia (alliés)",
+        "Graves (alliés) tue Jayce (ennemis)",
+        "Viktor (ennemis) tue Graves (alliés)",
+        "LeeSin (ennemis) tue Zoe (alliés)"
+      ]
+    }
+  ]
+}

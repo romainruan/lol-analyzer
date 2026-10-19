@@ -29,9 +29,12 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--raw-dir", default="data/raw/sample")
     p.add_argument("--out", default="data/dataset.csv")
+    p.add_argument("--all-minutes", action="store_true",
+                   help="une ligne par minute (2 à 40) au lieu de 5/10/15/20/25")
     args = p.parse_args()
 
-    df = build_dataset(Path(args.raw_dir))
+    minutes = range(2, 41) if args.all_minutes else DEFAULT_MINUTES
+    df = build_dataset(Path(args.raw_dir), minutes)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out, index=False)
