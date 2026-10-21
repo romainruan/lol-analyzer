@@ -110,9 +110,7 @@
       "win_prob_before": 0.544,
       "win_prob_after": 0.441,
       "events": [
-        "Les alliés prennent des Larves du Néant",
-        "Les alliés prennent des Larves du Néant",
-        "Les alliés prennent des Larves du Néant",
+        "Les alliés prennent des Larves du Néant (×3)",
         "Les ennemis prennent le Dragon",
         "LeeSin (ennemis) tue Zoe (alliés)"
       ]

@@ -18,7 +18,7 @@ LLM local (Ollama). Le tout conteneurisé avec Docker.
 - [x] Repères du rôle mid et comparaison avec vos parties (`src/benchmarks.py`)
 - [x] Courbe de probabilité de victoire par partie et moments clés (`src/winprob.py`)
 - [ ] Interprétation (SHAP)
-- [ ] Débrief par LLM local (Ollama)
+- [x] Débrief par LLM local avec vérification des nombres (`src/debrief.py`)
 - [ ] Interface Streamlit
 
 ## Démarrage
@@ -97,6 +97,24 @@ l'entrée du débrief par LLM : le modèle de langage ne lit jamais la timeline 
 Avertissement : un saut de probabilité n'est pas une cause. Il signale qu'un
 écart d'or, d'XP ou d'objectifs a bougé ; l'événement associé est le plus
 plausible, pas prouvé.
+
+### 6. Débrief par un LLM local (Ollama)
+
+```bash
+ollama pull qwen2.5:7b                          # une seule fois (environ 4,7 Go)
+python -m src.winprob analyze --limit 5         # courbes et moments clés
+python -m src.debrief --limit 1 --dry-run       # affiche ce qui sera envoyé au modèle
+python -m src.debrief --limit 3                 # rédige les débriefs dans results/debriefs/
+```
+
+Le modèle ne lit jamais la timeline brute : il reçoit un résumé chiffré (statistiques
+de la partie, position parmi les mid laners de référence, moments clés avec leurs
+événements). Le prompt lui interdit d'inventer et de présenter un saut de probabilité
+comme une cause prouvée.
+
+Après chaque génération, un contrôle automatique compare les nombres du texte à ceux
+des données fournies et signale tout nombre absent. Il ne vérifie ni le sens des
+phrases ni les noms de champions : relisez chaque débrief.
 
 ### Avec Docker
 

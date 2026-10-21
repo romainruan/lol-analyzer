@@ -98,9 +98,7 @@
       "win_prob_before": 0.601,
       "win_prob_after": 0.785,
       "events": [
-        "Les alliés prennent des Larves du Néant",
-        "Les alliés prennent des Larves du Néant",
-        "Les alliés prennent des Larves du Néant",
+        "Les alliés prennent des Larves du Néant (×3)",
         "Darius (alliés) tue Warwick (ennemis)",
         "Elise (alliés) tue Talon (ennemis)",
         "Qiyana (alliés) tue Nami (ennemis)"

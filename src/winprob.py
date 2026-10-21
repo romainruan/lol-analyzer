@@ -107,6 +107,14 @@ def find_turning_points(
     return sorted(top, key=lambda c: c["minute"])
 
 
+def collapse_duplicates(items: list[str]) -> list[str]:
+    """Regroupe les phrases identiques : trois fois « prennent des Larves » -> « ... (×3) »."""
+    counts: dict[str, int] = {}
+    for item in items:
+        counts[item] = counts.get(item, 0) + 1
+    return [f"{text} (×{n})" if n > 1 else text for text, n in counts.items()]
+
+
 def describe_events(events: list[dict], participants: list[dict], my_team: int | None) -> list[str]:
     """Traduit les événements bruts de la timeline en phrases courtes."""
     champ = {p["participantId"]: p.get("championName", "?") for p in participants}
@@ -136,7 +144,7 @@ def describe_events(events: list[dict], participants: list[dict], my_team: int |
             victim = who(e.get("victimId", 0))
             killer = e.get("killerId", 0)
             kills.append(f"{who(killer)} tue {victim}" if killer else f"{victim} meurt")
-    return (objectives + kills)[:6]
+    return collapse_duplicates(objectives + kills)[:6]
 
 
 def analyze_match(

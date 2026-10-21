@@ -4,6 +4,7 @@ import pandas as pd
 from src.features import build_rows
 from src.winprob import (
     analyze_match,
+    collapse_duplicates,
     describe_events,
     evaluate_curve_model,
     find_turning_points,
@@ -131,3 +132,10 @@ def test_plot_is_written(tmp_path):
     out = tmp_path / "curve.png"
     plot_curve(analysis, out)
     assert out.exists() and out.stat().st_size > 0
+
+
+def test_repeated_events_are_grouped():
+    assert collapse_duplicates(["a", "a", "b", "a"]) == ["a (×3)", "b"]
+    events = [{"type": "ELITE_MONSTER_KILL", "killerTeamId": 100, "monsterType": "HORDE"}] * 3
+    assert describe_events(events, participants(), my_team=100) == [
+        "Les alliés prennent des Larves du Néant (×3)"]

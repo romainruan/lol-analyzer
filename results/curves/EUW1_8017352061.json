@@ -142,8 +142,7 @@
       "win_prob_before": 0.314,
       "win_prob_after": 0.731,
       "events": [
-        "Les alliés détruisent une tour",
-        "Les alliés détruisent une tour",
+        "Les alliés détruisent une tour (×2)",
         "Briar (alliés) tue Renekton (ennemis)",
         "Briar (alliés) tue Syndra (ennemis)",
         "Briar (alliés) tue Yasuo (ennemis)"
