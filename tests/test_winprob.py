@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.features import build_rows
 from src.winprob import (
@@ -144,6 +145,68 @@ def test_repeated_events_are_grouped():
     events = [{"type": "ELITE_MONSTER_KILL", "killerTeamId": 100, "monsterType": "HORDE"}] * 3
     assert describe_events(events, participants(), my_team=100) == [
         "Les alliés prennent des Larves du Néant (×3)"]
+
+
+# ----------------------------------------------------------------------------- calibration
+def test_calibration_by_phase_compares_predicted_and_observed_win_rates():
+    from src.winprob import calibration_by_phase
+
+    # 2-5 min : on annonce 80 % mais seule 1 partie sur 2 est gagnée
+    y = np.array([1, 0, 1, 0, 1, 1])
+    p = np.array([0.8, 0.8, 0.8, 0.8, 0.6, 0.6])
+    minutes = np.array([3, 3, 4, 4, 12, 12])
+    table = calibration_by_phase(y, p, minutes, n_bins=1)
+    early = table[table["phase"] == "2-5"].iloc[0]
+    assert early["predit"] == pytest.approx(0.8) and early["observe"] == 0.5 and early["n"] == 4
+    assert early["ecart"] == pytest.approx(0.3)
+    late = table[table["phase"] == "11-15"].iloc[0]
+    assert late["observe"] == 1.0 and late["n"] == 2
+    assert set(table["phase"]) == {"2-5", "11-15"}  # les phases sans ligne n'apparaissent pas
+
+
+def test_curve_calibration_covers_each_phase_with_every_row():
+    from src.winprob import curve_calibration
+
+    df = training_frame(n_games=100, n_frames=26)  # minutes 2 à 25
+    table = curve_calibration(df, n_splits=3, n_bins=3)
+    assert set(table["phase"]) == {"2-5", "6-10", "11-15", "16-25"}
+    assert table["n"].sum() == len(df)
+
+
+# ----------------------------------------------------------------------------- explication des sauts
+def test_jump_contributions_add_up_to_the_jump_and_name_the_family():
+    model = fit_curve_model(training_frame())
+    # seule la famille « ressources » bouge à la minute 10
+    match, timeline = fake_game([0] * 10 + [5000] * 10)
+    tp = analyze_match(model, match, timeline, puuid="b1")["turning_points"][0]
+    parts = tp["contributions"]
+    assert set(parts) == {"ressources", "combats", "objectifs", "vision"}
+    jump = (tp["win_prob_after"] - tp["win_prob_before"]) * 100
+    assert sum(parts.values()) == pytest.approx(jump, abs=0.5)
+    assert parts["ressources"] == pytest.approx(jump, abs=0.5)
+    assert parts["objectifs"] == 0 and parts["combats"] == 0
+
+
+def test_jump_contributions_change_sign_with_the_perspective():
+    model = fit_curve_model(training_frame())
+    match, timeline = fake_game([0] * 10 + [5000] * 10)
+    blue = analyze_match(model, match, timeline, puuid="b1")["turning_points"][0]["contributions"]
+    red = analyze_match(model, match, timeline, puuid="r1")["turning_points"][0]["contributions"]
+    assert blue["ressources"] > 0 > red["ressources"]
+
+
+def test_jump_contributions_credit_a_baron_to_objectives():
+    baron = {10: [{"type": "ELITE_MONSTER_KILL", "killerTeamId": 200, "monsterType": "BARON_NASHOR",
+                   "timestamp": 590_000}]}
+    match, timeline = fake_game([0] * 20, events_by_minute=baron)
+    # le modèle d'entraînement ne voit aucun Nashor : on vérifie sur un modèle qui lui donne du poids
+    df = training_frame()
+    df["barons_diff"] = np.where(df["blue_win"] == 1, 1, -1)
+    objective_model = fit_curve_model(df)
+    tp = next(t for t in analyze_match(objective_model, match, timeline, puuid="b1", min_delta=0.01)["turning_points"]
+              if t["minute"] == 10)
+    assert tp["contributions"]["objectifs"] < 0
+    assert tp["contributions"]["ressources"] == 0
 
 
 # ----------------------------------------------------------------------------- nouvelles parties

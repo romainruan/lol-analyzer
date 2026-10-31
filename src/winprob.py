@@ -19,6 +19,7 @@ import json
 from pathlib import Path
 
 import joblib
+import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss, roc_auc_score
@@ -34,6 +35,15 @@ NO_EVENT = "pas d'événement majeur, l'écart d'or ou d'XP évolue"
 MAX_MINUTE = 40  # limite du jeu d'entraînement (--all-minutes) : au-delà on n'extrapole pas
 REPORT_MINUTES = (5, 10, 15, 20, 25)
 FIRST_MINUTE = 2  # avant, tous les écarts sont quasi nuls
+PHASES = ((2, 5), (6, 10), (11, 15), (16, 25), (26, MAX_MINUTE))
+# les variables d'une même famille bougent ensemble : les détailler une par une serait trompeur
+FAMILIES = {
+    "gold_diff": "ressources", "xp_diff": "ressources", "level_diff": "ressources", "cs_diff": "ressources",
+    "kills_diff": "combats",
+    "towers_diff": "objectifs", "dragons_diff": "objectifs", "heralds_diff": "objectifs",
+    "grubs_diff": "objectifs", "barons_diff": "objectifs",
+    "wards_diff": "vision",
+}
 MONSTERS = {
     "DRAGON": "le Dragon",
     "RIFTHERALD": "le Héraut",
@@ -73,13 +83,41 @@ def fit_curve_model(df: pd.DataFrame) -> Pipeline:
     return model
 
 
-def evaluate_curve_model(df: pd.DataFrame, n_splits: int = 5) -> pd.DataFrame:
-    """AUC hors échantillon (validation croisée par partie) à quelques minutes repères."""
+def _oof_curve_proba(df: pd.DataFrame, n_splits: int = 5) -> np.ndarray:
+    """Probabilités hors échantillon : chaque partie est prédite par un modèle qui ne l'a pas vue."""
     cv = GroupKFold(n_splits=min(n_splits, df["match_id"].nunique()))
-    p = cross_val_predict(
+    return cross_val_predict(
         make_curve_model(), design_matrix(df), df["blue_win"],
         groups=df["match_id"], cv=cv, method="predict_proba",
     )[:, 1]
+
+
+def calibration_by_phase(y: np.ndarray, p: np.ndarray, minutes: np.ndarray, n_bins: int = 5) -> pd.DataFrame:
+    """Quand le modèle annonce X %, quelle part des parties est gagnée ? Une table par phase de jeu,
+    car un bon score global peut cacher un modèle trop sûr de lui en début de partie."""
+    rows = []
+    for first, last in PHASES:
+        mask = (minutes >= first) & (minutes <= last)
+        if not mask.any():
+            continue
+        y_phase, p_phase = y[mask], p[mask]
+        for chunk in np.array_split(np.argsort(p_phase, kind="stable"), n_bins):  # effectifs égaux
+            if len(chunk):
+                predicted, observed = p_phase[chunk].mean(), y_phase[chunk].mean()
+                rows.append({"phase": f"{first}-{last}", "n": len(chunk), "predit": predicted,
+                             "observe": observed, "ecart": abs(predicted - observed)})
+    return pd.DataFrame(rows)
+
+
+def curve_calibration(df: pd.DataFrame, n_splits: int = 5, n_bins: int = 5) -> pd.DataFrame:
+    """Calibration du modèle de courbe, mesurée hors échantillon (validation croisée par partie)."""
+    p = _oof_curve_proba(df, n_splits)
+    return calibration_by_phase(df["blue_win"].to_numpy(), p, df["minute"].to_numpy(), n_bins)
+
+
+def evaluate_curve_model(df: pd.DataFrame, n_splits: int = 5) -> pd.DataFrame:
+    """AUC hors échantillon (validation croisée par partie) à quelques minutes repères."""
+    p = _oof_curve_proba(df, n_splits)
     rows = []
     for m in REPORT_MINUTES:
         mask = (df["minute"] == m).to_numpy()
@@ -150,6 +188,21 @@ def find_turning_points(
     return sorted(top, key=lambda c: c["minute"])
 
 
+def jump_contributions(model: Pipeline, before: pd.Series, after: pd.Series, jump: float) -> dict[str, float]:
+    """Répartit un saut de probabilité (en points) entre les familles de variables.
+
+    Le modèle est linéaire en logit : la variation de chaque variable a un effet exact sur le logit,
+    et `jump` est réparti au prorata. Dit ce qui a bougé la prédiction, pas ce qui a causé la victoire."""
+    coefs = model.named_steps["clf"].coef_[0] / model.named_steps["scale"].scale_
+    effects = dict.fromkeys(FAMILIES.values(), 0.0)
+    for column, coef, change in zip(before.index, coefs, after - before, strict=True):
+        effects[FAMILIES[column.split("*")[0]]] += coef * change
+    total = sum(effects.values())
+    if total == 0:
+        return effects
+    return {family: round(jump * effect / total, 1) + 0.0 for family, effect in effects.items()}
+
+
 def collapse_duplicates(items: list[str]) -> list[str]:
     """Regroupe les phrases identiques : trois fois « prennent des Larves » -> « ... (×3) »."""
     counts: dict[str, int] = {}
@@ -201,7 +254,8 @@ def analyze_match(
     df = pd.DataFrame(build_rows(match, timeline, minutes=range(FIRST_MINUTE, len(frames))))
     if df.empty:
         return None
-    p_blue = model.predict_proba(design_matrix(df))[:, 1]
+    X = design_matrix(df)
+    p_blue = model.predict_proba(X)[:, 1]
 
     me = next((p for p in info["participants"] if puuid and p.get("puuid") == puuid), None)
     my_team = me["teamId"] if me else None
@@ -211,11 +265,13 @@ def analyze_match(
 
     turning = []
     for tp in find_turning_points(minutes, probs, k, min_delta):
+        i = minutes.index(tp["minute"])
         turning.append(
             {
                 "minute": tp["minute"],
                 "win_prob_before": round(tp["before"], 3),
                 "win_prob_after": round(tp["after"], 3),
+                "contributions": jump_contributions(model, X.iloc[i - 1], X.iloc[i], tp["delta"] * 100),
                 "events": describe_events(
                     frames[tp["minute"]].get("events", []), info["participants"], my_team
                 ),
@@ -320,6 +376,12 @@ def cmd_train(args: argparse.Namespace) -> None:
     model = fit_curve_model(df)
     out = Path(args.model)
     out.parent.mkdir(parents=True, exist_ok=True)
+    if args.calibration:
+        calib = curve_calibration(df)
+        calib.to_csv(out.parent / "curve_calibration.csv", index=False)
+        print("\nCalibration du modèle de courbe, hors échantillon (prédit vs observé) :")
+        print(calib.round(3).to_string(index=False))
+        print(f"Détail : {out.parent / 'curve_calibration.csv'}")
     joblib.dump(model, out)
     print(f"\nModèle enregistré dans {out}")
 
@@ -365,6 +427,8 @@ def cmd_analyze(args: argparse.Namespace) -> None:
         for tp in analysis["turning_points"]:
             print(f"  {tp['minute']:>2} min : {tp['win_prob_before']:.0%} -> {tp['win_prob_after']:.0%}"
                   f"  | {' ; '.join(tp['events'][:3]) or NO_EVENT}")
+            parts = [f"{family} {points:+.1f}" for family, points in tp["contributions"].items() if points]
+            print(f"           points de probabilité : {', '.join(parts) or 'aucun'}")
     print(f"\nFichiers écrits dans {out_dir}/")
 
 
@@ -380,6 +444,8 @@ def main() -> None:
                         "entraînement sur les autres")
     t.add_argument("--patch-holdout", action="store_true",
                    help="teste aussi chaque patch (300 parties au moins) en entraînant sur les autres")
+    t.add_argument("--calibration", action="store_true",
+                   help="mesure aussi la calibration par phase de jeu (curve_calibration.csv)")
     t.set_defaults(func=cmd_train)
 
     a = sub.add_parser("analyze", help="courbe et moments clés de vos parties")
