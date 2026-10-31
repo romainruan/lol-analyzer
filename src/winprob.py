@@ -177,6 +177,8 @@ def describe_events(events: list[dict], participants: list[dict], my_team: int |
     for e in events:
         t = e.get("type")
         if t == "ELITE_MONSTER_KILL":
+            if e.get("killerTeamId") not in (BLUE, RED):  # monstre tué sans équipe en jeu
+                continue
             name = MONSTERS.get(e.get("monsterType"), str(e.get("monsterType")))
             objectives.append(f"Les {side(e.get('killerTeamId', 0))} prennent {name}")
         elif t == "BUILDING_KILL":

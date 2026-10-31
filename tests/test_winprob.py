@@ -90,6 +90,11 @@ def test_describe_events_uses_side_and_prioritises_objectives():
     assert describe_events(events, participants(), None)[0] == "Les rouges prennent Nashor"
 
 
+def test_describe_events_skips_a_monster_without_a_playing_team():
+    events = [{"type": "ELITE_MONSTER_KILL", "killerTeamId": 300, "monsterType": "DRAGON"}]
+    assert describe_events(events, participants(), my_team=100) == []
+
+
 def test_analyze_match_finds_the_swing_and_flips_perspective():
     model = fit_curve_model(training_frame())
     diffs = [0] * 10 + [5000] * 10  # bascule à la minute 10

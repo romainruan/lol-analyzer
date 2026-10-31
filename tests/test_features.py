@@ -89,6 +89,17 @@ def test_skips_partial_last_frame():
     assert rows == []
 
 
+def test_monster_without_a_playing_team_counts_for_nobody():
+    events = [
+        {"type": "ELITE_MONSTER_KILL", "timestamp": 100_000, "killerTeamId": 300, "monsterType": "DRAGON"},
+        {"type": "ELITE_MONSTER_KILL", "timestamp": 110_000, "monsterType": "DRAGON"},
+        {"type": "ELITE_MONSTER_KILL", "timestamp": 120_000, "killerTeamId": 200, "monsterType": "DRAGON"},
+    ]
+    timeline = {"info": {"frames": [_frame(0, 500, 500), _frame(1, 500, 500), _frame(2, 500, 500, events),
+                                    _frame(3, 500, 500)]}}
+    assert build_rows(_match(True), timeline, minutes=(3,))[0]["dragons_diff"] == -1
+
+
 def test_skips_remakes_only():
     timeline = {"info": {"frames": [_frame(i, 500, 500) for i in range(6)]}}
     match = _match(True)

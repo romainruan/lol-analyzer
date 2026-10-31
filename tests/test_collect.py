@@ -26,6 +26,14 @@ def test_returns_none_when_unresolvable():
     assert resolve_puuid(FakeClient(), {}) is None
 
 
+def test_expired_key_stops_the_collection_instead_of_skipping_players():
+    import pytest
+    from src.riot_client import AuthError
+
+    with pytest.raises(AuthError):
+        resolve_puuid(FakeClient(error=AuthError("403")), {"summonerId": "s1"})
+
+
 # ----------------------------------------------------------------------------- --start
 def test_collect_for_puuid_can_skip_the_most_recent_games(tmp_path):
     from src.collect import collect_for_puuid

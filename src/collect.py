@@ -22,7 +22,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from .riot_client import NotFound, RiotAPIError, RiotClient
+from .riot_client import AuthError, NotFound, RiotAPIError, RiotClient
 
 APEX_TIERS = {"MASTER", "GRANDMASTER", "CHALLENGER"}
 
@@ -35,6 +35,8 @@ def resolve_puuid(client: RiotClient, entry: dict) -> str | None:
     if summoner_id:
         try:
             return client.get_puuid_by_summoner_id(summoner_id)
+        except AuthError:  # clé expirée : tous les joueurs suivants échoueraient aussi
+            raise
         except (NotFound, RiotAPIError):
             return None
     return None

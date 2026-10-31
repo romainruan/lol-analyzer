@@ -103,7 +103,10 @@ def build_rows(match: dict, timeline: dict, minutes=DEFAULT_MINUTES) -> list[dic
             elif t == "BUILDING_KILL" and e.get("buildingType") == "TOWER_BUILDING":
                 towers += _sign(RED if e["teamId"] == BLUE else BLUE)  # équipe qui détruit
             elif t == "ELITE_MONSTER_KILL":
-                s = _sign(e.get("killerTeamId", 0))
+                team = e.get("killerTeamId")
+                if team not in (BLUE, RED):  # monstre tué sans équipe en jeu
+                    continue
+                s = _sign(team)
                 kind = e.get("monsterType")
                 if kind == "DRAGON":
                     dragons += s

@@ -461,6 +461,11 @@ def test_review_sheet_update_keeps_manual_columns(tmp_path):
     assert data[0]["erreurs_chiffres"] == "2" and data[0]["remarques"] == "OK sinon"
 
 
+def test_markdown_does_not_claim_the_model_saw_every_fact():
+    md = render_markdown("EUW1_3", mid_brief(), "Texte.", [], "qwen2.5:7b (hybride v5.2)")
+    assert "Faits fournis au modèle" not in md
+
+
 def test_review_sheet_saved_by_excel_with_a_bom_keeps_manual_columns(tmp_path):
     path = tmp_path / "review.csv"
     # « CSV UTF-8 » d'Excel : un BOM au début du fichier
