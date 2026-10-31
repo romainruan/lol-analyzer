@@ -93,7 +93,7 @@ def priorities(history: pd.DataFrame, bench: pd.DataFrame | None, role: str | No
     for col in STAT_COLS:
         name = STAT_FORMAT[col][0]
         values = recent[col].dropna().astype(float)
-        if name in ignored or values.empty:
+        if name in ignored or values.empty or not reference[col].notna().any():
             continue
         mean = values.mean()
         percentile = _percentile(mean, reference[col])

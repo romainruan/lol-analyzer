@@ -17,9 +17,9 @@ from pathlib import Path
 import pandas as pd
 
 from .benchmarks import DEFAULT_BENCH, ROLE_NAMES, STAT_COLS, load_benchmarks
-from .debrief import LABELS, STAT_FORMAT, _format, _fr
+from .debrief import LABELS, STAT_FORMAT, _format, _fr, _moment_sentence, moment_facts
 from .progress import champion_table, main_role, player_history, priorities, trend_table
-from .winprob import EARLY_MINUTE, format_gaps
+from .winprob import EARLY_MINUTE
 
 LEGAL = ("lol-analyzer isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone "
          "officially involved in producing or managing Riot Games properties. Riot Games, and all associated "
@@ -267,15 +267,7 @@ def debrief_html(markdown: str) -> str:
 
 def _moments_html(analysis: dict) -> str:
     """Les moments clés quand aucun débrief n'a été écrit."""
-    items = []
-    for tp in analysis["turning_points"]:
-        text = (f"{tp['minute']}e minute : la probabilité de l'équipe passe de {round(tp['win_prob_before'] * 100)} % à "
-                f"{round(tp['win_prob_after'] * 100)} %.")
-        if tp.get("events"):
-            text += " Événements : " + " ; ".join(tp["events"]) + "."
-        if tp.get("ecarts"):
-            text += f" Écarts sur la minute : {format_gaps(tp['ecarts'])}."
-        items.append(f"<li>{escape(text)}</li>")
+    items = [f"<li>{escape(_moment_sentence(moment_facts(tp)))}</li>" for tp in analysis["turning_points"]]
     return f"<h4>Moments clés</h4><ul>{''.join(items)}</ul>" if items else ""
 
 

@@ -89,7 +89,7 @@ l'identique : un modèle enregistré dépend de sa version de scikit-learn.
 ### En deux commandes
 
 ```bash
-# une fois : échantillon de référence, modèle de probabilité et repères (200 joueurs, 5 parties : environ 1 h 30)
+# une fois : échantillon de référence, modèle de probabilité et repères (200 joueurs, 5 parties : environ 45 minutes)
 python -m src.run prepare --tier MASTER --max-players 200 --per-player 5
 
 # à chaque fois que vous voulez faire le point : télécharge, analyse, écrit les débriefs et le rapport
@@ -107,6 +107,7 @@ pas votre puuid, mais il contient vos identifiants de parties : à partager en c
 - Sans `prepare`, le rapport se limite à vos tendances et à vos champions.
 - `report --llm` fait rédiger le résumé de chaque partie par le LLM local. Si Ollama ne répond pas, le débrief est écrit par le code.
 - `--no-collect` réutilise les parties déjà téléchargées, sans appeler Riot.
+- Seules les parties nouvelles sont traitées. Après un nouvel entraînement, les courbes et les débriefs plus anciens que le modèle sont refaits.
 - `--platform kr` choisit un autre serveur : la région de routage s'en déduit.
 - `prepare --kind` et `--features` choisissent le modèle (voir section 5), `--label` le nom de l'échantillon.
 - `--bench data/gold.csv`, sur les deux commandes, garde des repères par rang dans des fichiers séparés.

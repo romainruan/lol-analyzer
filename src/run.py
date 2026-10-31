@@ -1,6 +1,6 @@
 """Toute la chaîne en deux commandes, avec une clé Riot dans .env.
 
-    # une fois : échantillon de référence, modèle de probabilité et repères (500 joueurs : environ 3 h 30)
+    # une fois : échantillon de référence, modèle de probabilité et repères (500 joueurs : environ 2 h)
     python -m src.run prepare --tier MASTER --max-players 500 --per-player 5
 
     # à chaque fois que vous voulez faire le point : télécharge, analyse, écrit le rapport HTML

@@ -161,6 +161,18 @@ def test_key_moments_close_to_each_other_do_not_share_a_label_position():
     assert len(tags) == 2 and tags[0][1] != tags[1][1]
 
 
+def test_moments_without_debrief_use_the_same_sentence_as_the_debrief(tmp_path):
+    raw, ids = _player_dir(tmp_path, n_games=1)
+    moment = {**ANALYSIS["turning_points"][0], "contributions": {"ressources": 23.0}}
+    curves = tmp_path / "curves"
+    curves.mkdir()
+    (curves / f"{ids[0]}.json").write_text(json.dumps({**ANALYSIS, "match_id": ids[0], "turning_points": [moment]}),
+                                           encoding="utf-8")
+    html = build_report(raw, curves, tmp_path / "absent", None)
+    assert "Part du saut : ressources 23,0 points." in html
+    assert "estimation peu fiable" in html
+
+
 def test_main_writes_a_utf8_file(tmp_path):
     raw, ids = _player_dir(tmp_path)
     out = tmp_path / "sortie" / "rapport.html"
