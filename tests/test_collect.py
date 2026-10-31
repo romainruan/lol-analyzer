@@ -24,3 +24,18 @@ def test_falls_back_to_summoner_id():
 def test_returns_none_when_unresolvable():
     assert resolve_puuid(FakeClient(error=NotFound("x")), {"summonerId": "s1"}) is None
     assert resolve_puuid(FakeClient(), {}) is None
+
+
+# ----------------------------------------------------------------------------- --start
+def test_collect_for_puuid_can_skip_the_most_recent_games(tmp_path):
+    from src.collect import collect_for_puuid
+
+    calls = []
+
+    class Client:
+        def get_match_ids(self, puuid, start=0, count=20, **kw):
+            calls.append((puuid, start, count))
+            return []
+
+    assert collect_for_puuid(Client(), "p1", tmp_path, count=100, start=100) == 0
+    assert calls == [("p1", 100, 100)]

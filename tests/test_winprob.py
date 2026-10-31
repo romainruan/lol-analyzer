@@ -139,3 +139,32 @@ def test_repeated_events_are_grouped():
     events = [{"type": "ELITE_MONSTER_KILL", "killerTeamId": 100, "monsterType": "HORDE"}] * 3
     assert describe_events(events, participants(), my_team=100) == [
         "Les alliés prennent des Larves du Néant (×3)"]
+
+
+# ----------------------------------------------------------------------------- nouvelles parties
+def _write_match(raw_dir, match_id, created):
+    import json
+    (raw_dir / "matches").mkdir(parents=True, exist_ok=True)
+    (raw_dir / "matches" / f"{match_id}.json").write_text(
+        json.dumps({"info": {"gameCreation": created}}), encoding="utf-8")
+
+
+def test_select_ids_takes_the_most_recent_games(tmp_path):
+    from src.winprob import select_ids
+
+    for i, created in enumerate([300, 100, 200]):
+        _write_match(tmp_path, f"EUW1_{i}", created)
+    assert select_ids(tmp_path, tmp_path / "curves", limit=2) == ["EUW1_0", "EUW1_2"]
+
+
+def test_select_ids_skip_existing_keeps_only_games_without_a_curve(tmp_path):
+    from src.winprob import select_ids
+
+    for i, created in enumerate([300, 100, 200]):
+        _write_match(tmp_path, f"EUW1_{i}", created)
+    curves = tmp_path / "curves"
+    curves.mkdir()
+    (curves / "EUW1_0.json").write_text("{}", encoding="utf-8")  # la plus récente est déjà analysée
+    assert select_ids(tmp_path, curves, limit=5, skip_existing=True) == ["EUW1_2", "EUW1_1"]
+    # le plafond s'applique après le filtre, pas avant
+    assert select_ids(tmp_path, curves, limit=1, skip_existing=True) == ["EUW1_2"]

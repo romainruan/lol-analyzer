@@ -580,3 +580,23 @@ def test_check_claims_flags_one_minute_given_two_values():
     assert check_claims(text, brief) == ["la 7e minute est citée avec deux valeurs : 30 % et 22 %"]
     ok = "À la 9e minute, elle passe de 54 % à 44 %. Son minimum de 45 % est à la 2e minute."
     assert check_claims(ok, brief) == []
+
+
+# ----------------------------------------------------------------------------- --only-unreviewed
+def test_only_unreviewed_skips_games_already_in_the_review_sheet(tmp_path):
+    import os
+    from src.debrief import _select_ids, reviewed_ids
+
+    curves = tmp_path / "curves"
+    curves.mkdir()
+    for i, name in enumerate(["EUW1_1", "EUW1_2", "EUW1_3"]):
+        f = curves / f"{name}.json"
+        f.write_text("{}", encoding="utf-8")
+        os.utime(f, (1000 + i, 1000 + i))  # EUW1_3 est la plus récente
+    sheet = tmp_path / "review.csv"
+    sheet.write_text("﻿match_id,modele,controle_auto\nEUW1_3,gabarit,ok\n", encoding="utf-8")
+    assert reviewed_ids(sheet) == {"EUW1_3"}  # l'en-tête ajouté par Excel est toléré
+    assert reviewed_ids(tmp_path / "absent.csv") == set()
+    assert _select_ids(curves, None, 5) == ["EUW1_3", "EUW1_2", "EUW1_1"]
+    assert _select_ids(curves, None, 5, exclude=reviewed_ids(sheet)) == ["EUW1_2", "EUW1_1"]
+    assert _select_ids(curves, "EUW1_3", 5, exclude={"EUW1_3"}) == ["EUW1_3"]  # --match-id l'emporte

@@ -61,9 +61,10 @@ def collect_match(client: RiotClient, match_id: str, raw_dir: Path) -> bool:
     return True
 
 
-def collect_for_puuid(client: RiotClient, puuid: str, raw_dir: Path, count: int) -> int:
+def collect_for_puuid(client: RiotClient, puuid: str, raw_dir: Path, count: int, start: int = 0) -> int:
+    """Télécharge `count` parties à partir de la `start`-ième (0 = la plus récente)."""
     new = 0
-    for match_id in client.get_match_ids(puuid, count=count):
+    for match_id in client.get_match_ids(puuid, start=start, count=count):
         if collect_match(client, match_id, raw_dir):
             new += 1
             print(f"  + {match_id}")
@@ -74,7 +75,10 @@ def main() -> None:
     load_dotenv()
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--riot-id", help='Votre Riot ID, ex. "Pseudo#EUW"')
-    p.add_argument("--count", type=int, default=20, help="Nb de parties (mode --riot-id)")
+    p.add_argument("--count", type=int, default=20, help="Nb de parties (mode --riot-id, 100 au plus)")
+    p.add_argument("--start", type=int, default=0,
+                   help="Mode --riot-id : saute les N parties les plus récentes (ex. --start 100 "
+                        "--count 100 pour remonter plus loin dans l'historique)")
     p.add_argument("--tier", help="Tier à échantillonner (IRON..DIAMOND, MASTER, GRANDMASTER, CHALLENGER)")
     p.add_argument("--division", default="II", help="Division (I..IV), ignorée pour Master+")
     p.add_argument("--pages", type=int, default=1, help="Pages de la ligue (IRON..DIAMOND)")
@@ -95,7 +99,7 @@ def main() -> None:
         raw_dir.mkdir(parents=True, exist_ok=True)
         # utilisé plus tard pour retrouver vos parties (data/ est ignoré par git)
         (raw_dir / "puuid.txt").write_text(puuid, encoding="utf-8")
-        total = collect_for_puuid(client, puuid, raw_dir, args.count)
+        total = collect_for_puuid(client, puuid, raw_dir, args.count, args.start)
         print(f"{total} nouvelles parties dans {raw_dir}")
         return
 

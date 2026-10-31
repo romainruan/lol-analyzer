@@ -727,11 +727,20 @@ def append_review_rows(path: Path, rows: list[dict]) -> None:
 
 
 # ----------------------------------------------------------------------------- CLI
-def _select_ids(curves_dir: Path, match_id: str | None, limit: int) -> list[str]:
+def reviewed_ids(path: Path) -> set[str]:
+    """Parties déjà présentes dans la fiche de relecture (quel que soit le mode)."""
+    if not path.exists():
+        return set()
+    with path.open(encoding="utf-8-sig", newline="") as f:  # -sig : tolère l'en-tête ajouté par Excel
+        return {row["match_id"] for row in csv.DictReader(f)}
+
+
+def _select_ids(curves_dir: Path, match_id: str | None, limit: int,
+                exclude: set[str] | None = None) -> list[str]:
     if match_id:
         return [match_id]
     files = sorted(curves_dir.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
-    return [f.stem for f in files[:limit]]
+    return [f.stem for f in files if f.stem not in (exclude or set())][:limit]
 
 
 def main() -> None:
@@ -742,6 +751,9 @@ def main() -> None:
     p.add_argument("--out", default="results/debriefs")
     p.add_argument("--match-id")
     p.add_argument("--limit", type=int, default=3)
+    p.add_argument("--only-unreviewed", action="store_true",
+                   help="ignore les parties déjà présentes dans review.csv : sert à tester sur des "
+                        "parties que vous n'avez jamais relues")
     p.add_argument("--model", default=DEFAULT_MODEL)
     p.add_argument("--attempts", type=int, default=MAX_ATTEMPTS,
                    help="mode hybride : tentatives du modèle avant le résumé de repli (défaut 3)")
@@ -769,7 +781,8 @@ def main() -> None:
         if len(mine) >= MIN_PROFILE_GAMES:
             profile = (len(mine), compare(mine, bench))
 
-    ids = _select_ids(curves_dir, args.match_id, args.limit)
+    exclude = reviewed_ids(Path(args.out) / "review.csv") if args.only_unreviewed else None
+    ids = _select_ids(curves_dir, args.match_id, args.limit, exclude)
     if not ids:
         raise SystemExit(f"Aucune analyse dans {curves_dir} : lancez `python -m src.winprob analyze`.")
 

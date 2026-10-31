@@ -263,6 +263,18 @@ def cmd_train(args: argparse.Namespace) -> None:
     print(f"\nModèle enregistré dans {out}")
 
 
+def select_ids(raw_dir: Path, out_dir: Path, limit: int, skip_existing: bool = False) -> list[str]:
+    """Les `limit` parties les plus récentes. Avec `skip_existing`, celles qui ont déjà une courbe
+    dans `out_dir` sont écartées avant de compter : on ne traite que les nouvelles."""
+    files = sorted((raw_dir / "matches").glob("*.json"),
+                   key=lambda f: json.loads(f.read_text(encoding="utf-8"))["info"]
+                   .get("gameCreation", 0), reverse=True)
+    ids = [f.stem for f in files]
+    if skip_existing:
+        ids = [i for i in ids if not (out_dir / f"{i}.json").exists()]
+    return ids[:limit]
+
+
 def cmd_analyze(args: argparse.Namespace) -> None:
     model = joblib.load(args.model)
     raw_dir = Path(args.raw_dir)
@@ -274,10 +286,7 @@ def cmd_analyze(args: argparse.Namespace) -> None:
     if args.match_id:
         ids = [args.match_id]
     else:
-        files = sorted((raw_dir / "matches").glob("*.json"),
-                       key=lambda f: json.loads(f.read_text(encoding="utf-8"))["info"]
-                       .get("gameCreation", 0), reverse=True)
-        ids = [f.stem for f in files[: args.limit]]
+        ids = select_ids(raw_dir, Path(args.out), args.limit, args.skip_existing)
 
     out_dir = Path(args.out)
     for match_id in ids:
@@ -312,6 +321,8 @@ def main() -> None:
     a.add_argument("--me-dir", default="data/raw/me")
     a.add_argument("--match-id")
     a.add_argument("--limit", type=int, default=5)
+    a.add_argument("--skip-existing", action="store_true",
+                   help="ignore les parties qui ont déjà une courbe (ne traite que les nouvelles)")
     a.add_argument("--top", type=int, default=3, help="nombre de moments clés")
     a.add_argument("--model", default="results/curve_model.joblib")
     a.add_argument("--out", default="results/curves")
