@@ -228,8 +228,8 @@ def build_facts(
             "probabilite_finale_pct": pcts[-1],
             "derniere_minute": minutes_curve[-1],
             # toutes les minutes qui affichent la même valeur arrondie : le texte peut citer l'une d'elles
-            "minutes_au_plus_haut": [m for m, v in zip(minutes_curve, pcts) if v == max(pcts)],
-            "minutes_au_plus_bas": [m for m, v in zip(minutes_curve, pcts) if v == min(pcts)],
+            "minutes_au_plus_haut": [m for m, v in zip(minutes_curve, pcts, strict=True) if v == max(pcts)],
+            "minutes_au_plus_bas": [m for m, v in zip(minutes_curve, pcts, strict=True) if v == min(pcts)],
             "premiere_minute": minutes_curve[0],
         }
     facts["moments_cles"] = [
@@ -555,7 +555,6 @@ def check_claims(text: str, brief: dict) -> list[str]:
     pairs = _moment_pairs(brief)
     for sentence in re.split(r"(?<=[.!?])\s+|\n+", text):
         percents = [(m.start(), float(m.group(1).replace(",", "."))) for m in _PCT_POS.finditer(sentence)]
-        minutes = [(m.start(), int(m.group(1) or m.group(2))) for m in _MINUTE_REF.finditer(sentence)]
         flagged = False
         for words, label, agree, value_key, minutes_key in (
                 (_MAX_WORDS, "maximum", "annoncé", "plus_haut_pct", "minutes_au_plus_haut"),
@@ -834,7 +833,7 @@ def main() -> None:
                 text = chat(messages, args.model)
                 issues = check_text(text, brief)
         except OllamaError as e:
-            raise SystemExit(str(e))
+            raise SystemExit(str(e)) from e
         control = control or ("; ".join(issues) or "ok")
         out_dir.mkdir(parents=True, exist_ok=True)
         suffix = {"hybrid": "", "llm": "_llm", "template": "_gabarit"}[mode]

@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
 # les messages Python s'affichent tout de suite dans `docker compose logs`
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
 COPY requirements.txt .

@@ -1,0 +1,6 @@
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP"]
+ignore = ["E501"]  # lignes longues tolérées : les phrases du débrief sont écrites en toutes lettres

@@ -1,7 +1,9 @@
 services:
   app:
     build: .
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false  # le conteneur démarre même sans .env (ex. tests, CI)
     environment:
       # le LLM tourne dans le service « ollama » ci-dessous, joignable par son nom
       OLLAMA_HOST: http://ollama:11434

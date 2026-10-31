@@ -19,7 +19,6 @@ import json
 from pathlib import Path
 
 import joblib
-import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss, roc_auc_score
@@ -225,7 +224,7 @@ def analyze_match(
             "role": me.get("teamPosition") if me else None,
             "result": "victoire" if won else "défaite",
         },
-        "curve": [{"minute": m, "win_prob": round(p, 3)} for m, p in zip(minutes, probs)],
+        "curve": [{"minute": m, "win_prob": round(p, 3)} for m, p in zip(minutes, probs, strict=True)],
         "turning_points": turning,
     }
 

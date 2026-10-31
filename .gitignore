@@ -1,9 +1,16 @@
+# secrets et données personnelles : ne jamais les versionner
 .env
 data/
+results/
+
+# environnement et caches
+.venv/
 __pycache__/
 *.pyc
 .pytest_cache/
-.venv/
-results/
+.ruff_cache/
+
+# fichiers parasites (Windows / notes de travail)
 *:Zone.Identifier
-.dockerignore.bak
+relecture_*.txt
+nouvelles.txt

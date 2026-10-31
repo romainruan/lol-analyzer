@@ -1,11 +1,23 @@
 # lol-analyzer
 
+![CI](https://github.com/romainruan/lol-analyzer/actions/workflows/ci.yml/badge.svg)
+
 Analyse de parties de League of Legends : collecte via l'API Riot, modèle de
 probabilité de victoire (Scikit-learn), moments clés, puis débrief généré par un
 LLM local (Ollama). Le tout conteneurisé avec Docker.
 
-> Projet personnel, non affilié à Riot Games. Ne publiez ni votre clé API ni de
-> données personnelles de joueurs.
+![Probabilité de victoire d'une partie, minute par minute, avec ses trois moments clés](docs/img/exemple_courbe.png)
+
+*Exemple : probabilité de victoire de l'équipe minute par minute. Les trois plus gros sauts sont les
+« moments clés » du débrief, chacun associé à l'événement de la minute. Un saut n'est pas une cause.*
+
+**Démarrage rapide** (Docker, voir [Avec Docker](#avec-docker)) :
+`docker compose build && docker compose run --rm app python -m pytest -q`
+
+> Projet personnel. lol-analyzer isn't endorsed by Riot Games and doesn't reflect the views or opinions
+> of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot
+> Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
+> Ne publiez ni votre clé API ni de données personnelles de joueurs.
 
 ## Ce que fait le projet
 
@@ -26,6 +38,8 @@ LLM local (Ollama). Le tout conteneurisé avec Docker.
 | Test dans le temps (20 % les plus récentes) | 0,64 | 0,74 | 0,82 | 0,86 | 0,88 |
 | Patch 16.20 mis de côté | 0,65 | 0,75 | 0,85 | 0,88 | 0,89 |
 | Patch 16.21 mis de côté | 0,68 | 0,77 | 0,83 | 0,87 | 0,89 |
+
+![AUC par minute des trois modèles, avec intervalle de confiance bootstrap](docs/img/auc_par_minute.png)
 
 Les écarts entre ces trois mesures sont de l'ordre du bruit de mesure : le modèle tient dans le temps
 et d'un patch à l'autre. Il prédit mal le début de partie (AUC 0,65 à 0,68 à 5 minutes) : les sauts de
@@ -48,7 +62,8 @@ fautive si au moins une erreur de chiffre, d'invention ou d'omission a été tro
 
 Réserves : v4 à v5.1 : mesurés sur les mêmes 12 parties, contrôles ajustés au fil des erreurs. v5.2 : mesurée sur 39 parties nouvelles, contrôles figés avant la mesure ; 4 résumés ont été remplacés par le texte du code après 3 échecs du modèle. Un seul relecteur.
 
-**Pistes** : mesurer la v5.2 sur de nouvelles parties, interprétation du modèle (SHAP), interface Streamlit.
+**Pistes** : repères par champion et par rang (Grandmaster), percentile de votre moyenne parmi les
+moyennes de joueurs (voir Limites), interprétation du modèle (SHAP), interface Streamlit.
 
 ## Démarrage
 
@@ -62,10 +77,13 @@ python -m pytest -q         # les tests ne nécessitent pas de clé
 ### 1. Collecter des données
 
 ```bash
-# vos parties classées
-python -m src.collect --riot-id "VotrePseudo#EUW" --count 30
+# vos parties classées (100 au plus par appel ; --start 100 remonte plus loin dans l'historique)
+python -m src.collect --riot-id "VotrePseudo#EUW" --count 100
 
-# un échantillon de votre tranche de rang (ex. Gold II) pour entraîner le modèle
+# un échantillon de joueurs Master pour entraîner le modèle (500 joueurs, 5 parties chacun)
+python -m src.collect --tier MASTER --per-player 5 --max-players 500 --out data/raw/sample
+
+# ou une tranche inférieure, par exemple Gold II
 python -m src.collect --tier GOLD --division II --pages 2 --per-player 5
 ```
 
@@ -105,16 +123,23 @@ python -m src.benchmarks --raw-dir data/raw/sample --me-dir data/raw/me
 Affiche les percentiles des mid laners de l'échantillon (CS/min, vision/min, KDA,
 participation aux kills, part des dégâts, CS/or/XP à 10 min) et situe vos propres
 parties en mid par rapport à eux. `collect --riot-id` enregistre votre puuid dans
-`data/raw/me/puuid.txt` pour retrouver vos parties.
+`data/raw/me/puuid.txt` pour retrouver vos parties. Attention : votre **moyenne** est placée dans la
+distribution de parties **individuelles** de la référence ; une moyenne varie moins qu'une partie, donc
+l'écart réel avec les autres joueurs est plus marqué que le percentile affiché.
 
 ### 5. Courbe de probabilité de victoire et moments clés
 
 ```bash
 # une ligne par minute (2 à 40) au lieu de 5/10/15/20/25
 python -m src.build_dataset --raw-dir data/raw/sample --all-minutes --out data/dataset_all.csv
-python -m src.winprob train --data data/dataset_all.csv
+python -m src.winprob train --data data/dataset_all.csv --time-split 0.2 --patch-holdout
 python -m src.winprob analyze --raw-dir data/raw/me --limit 5
 ```
+
+`train` affiche l'AUC en validation croisée par partie, puis, avec `--time-split 0.2`, l'AUC
+d'un modèle entraîné sur les parties les plus anciennes et testé sur les 20 % les plus récentes, et,
+avec `--patch-holdout`, l'AUC de chaque patch mis de côté (entraînement sur les autres).
+`analyze --skip-existing` ne traite que les parties sans courbe.
 
 Un seul modèle (régression logistique) sert pour toutes les minutes : le poids de
 chaque variable évolue avec le temps. Pour chaque partie analysée, `results/curves/`
@@ -205,22 +230,38 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d ollama
 Le conteneur `app` joint Ollama par son nom (`OLLAMA_HOST=http://ollama:11434`) : aucun port
 n'est publié, ce qui évite tout conflit avec un Ollama déjà lancé sur votre machine.
 
-## Points de rigueur
+## Rigueur méthodologique
 
-- Découper train/test **par partie** (jamais deux minutes d'une même partie des
-  deux côtés), idéalement par patch ou par date.
-- Mesurer AUC, log-loss et calibration, pas seulement la précision.
-- Vérifier chaque débrief LLM : un modèle local peut inventer un chiffre.
+- Validation croisée **par partie** (jamais deux minutes d'une même partie des deux côtés),
+  complétée par un test dans le temps et un test par patch.
+- AUC avec intervalle de confiance bootstrap, log-loss et calibration, pas seulement la précision.
+- Aucune fuite de données : à la minute N, seules les informations antérieures à N sont utilisées.
+- Débriefs : le code calcule, le modèle ne rédige que le résumé, chaque texte est contrôlé, et la
+  fidélité est mesurée par relecture manuelle (`docs/review.csv`).
 
 ## Limites connues
 
 - Les modèles de minutes tardives n'utilisent que les parties assez longues
   (biais de survie) : comparer les minutes entre elles demande de la prudence.
-- Quelques centaines de parties donnent des intervalles de confiance larges ;
-  les différences de quelques points d'AUC entre modèles ne sont pas significatives.
+- Les différences de quelques points d'AUC entre les trois modèles restent dans les intervalles de
+  confiance : à cette taille d'échantillon, rien ne justifie un modèle plus complexe qu'une régression
+  logistique.
+- Le modèle prédit mal le début de partie (AUC de 0,65 à 0,68 à 5 minutes) : les sauts de
+  probabilité avant la 5e minute sont peu fiables.
 - Les poids du modèle « lanes » sont des corrélations, pas des effets causaux :
   les lanes d'une même équipe sont corrélées entre elles.
 - Données issues d'un seul niveau de jeu (Master) : ne pas généraliser aux autres rangs.
 - `league-v4/entries` ne couvre que IRON à DIAMOND ; Master et au-delà utilisent
   d'autres endpoints.
 - La clé de développement expire toutes les 24 h.
+- Fidélité des débriefs mesurée sur 51 parties et par un seul relecteur ; le modèle de 7 milliards de
+  paramètres (Qwen2.5 7B) échoue encore 3 fois de suite sur environ 10 % des parties, qui reçoivent alors
+  le texte écrit par le code.
+- Les repères mid comparent une moyenne à des parties individuelles (voir plus haut), et mélangent tous
+  les champions : un percentile bas n'est pas forcément un défaut.
+- Les parties d'entraînement viennent de cinq semaines et de trois patchs : la validité sur une autre
+  saison n'est pas testée.
+
+## Licence
+
+MIT, voir `LICENSE`.
