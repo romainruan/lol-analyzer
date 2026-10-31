@@ -18,7 +18,7 @@ LLM local (Ollama). Le tout conteneurisé avec Docker.
 - [x] Repères du rôle mid et comparaison avec vos parties (`src/benchmarks.py`)
 - [x] Courbe de probabilité de victoire par partie et moments clés (`src/winprob.py`)
 - [ ] Interprétation (SHAP)
-- [x] Débrief par LLM local avec vérification des nombres (`src/debrief.py`)
+- [x] Débrief par LLM local : résumé contrôlé, reprise automatique et repli (`src/debrief.py`)
 - [ ] Interface Streamlit
 
 ## Démarrage
@@ -103,18 +103,49 @@ plausible, pas prouvé.
 ```bash
 ollama pull qwen2.5:7b                          # une seule fois (environ 4,7 Go)
 python -m src.winprob analyze --limit 5         # courbes et moments clés
-python -m src.debrief --limit 1 --dry-run       # affiche ce qui sera envoyé au modèle
-python -m src.debrief --limit 3                 # rédige les débriefs dans results/debriefs/
+python -m src.debrief --limit 1 --dry-run       # affiche ce que le modèle recevra
+python -m src.debrief --limit 3                 # mode hybride (par défaut)
+python -m src.debrief --limit 3 --mode template # sans modèle de langage (référence)
+python -m src.debrief --limit 3 --mode llm      # le modèle écrit tout le débrief
 ```
 
-Le modèle ne lit jamais la timeline brute : il reçoit un résumé chiffré (statistiques
-de la partie, position parmi les mid laners de référence, moments clés avec leurs
-événements). Le prompt lui interdit d'inventer et de présenter un saut de probabilité
-comme une cause prouvée.
+**Le code analyse, le modèle rédige.** Une première version donnait au modèle des
+chiffres bruts à interpréter : il mélangeait les chiffres, attribuait au joueur la
+probabilité de l'équipe et inventait des explications. Trois modes permettent de
+comparer leur fidélité :
 
-Après chaque génération, un contrôle automatique compare les nombres du texte à ceux
-des données fournies et signale tout nombre absent. Il ne vérifie ni le sens des
-phrases ni les noms de champions : relisez chaque débrief.
+| Mode | Qui écrit quoi | Rôle du contrôle |
+|---|---|---|
+| `template` | le code écrit tout (aucun LLM) | référence |
+| `hybrid` (défaut) | le code écrit moments clés, points forts, axes de progrès, tendance ; le modèle n'écrit que le résumé (3 phrases) | accepte, fait réessayer ou remplace le résumé |
+| `llm` | le modèle écrit tout | signale les problèmes |
+
+**Mode hybride.** Le modèle ne voit que la partie et la forme de la courbe
+(« 9e minute : de 54 % à 44 % »), jamais les événements ni les autres joueurs : il ne
+peut donc se tromper ni de cause ni de champion. Son résumé passe le contrôle ; en cas
+d'échec il reçoit la liste de ses erreurs et un autre tirage (graine différente), jusqu'à
+3 tentatives (`--attempts`). Si aucune ne passe, le résumé écrit par le code le remplace
+et la fiche de relecture le signale.
+
+**Contrôle automatique** : nombres absents des faits, pourcentages qui n'existent pas
+comme pourcentages, transitions « de A % à B % » qui mélangent deux sauts, moments clés
+omis, champions cités à la mauvaise minute, minutes écrites en lettres, mots anglais,
+caractères chinois, formulations causales (« grâce à », « suite à »...), sections écrites
+sans données, résumé de plus de 3 phrases. Il ne vérifie ni le sens des phrases, ni qui a
+tué qui : relisez chaque débrief.
+
+**Mesure de fidélité.** Chaque exécution met à jour `results/debriefs/review.csv` (une
+ligne par débrief et par mode, le mode hybride étant étiqueté `hybride v4`). Remplissez à
+la main `erreurs_chiffres`, `inventions` et `omissions` : vos annotations sont conservées
+quand vous relancez. Le nombre d'erreurs par débrief permet de comparer les modes et les
+modèles (`--model llama3.1:8b`). Fermez le fichier dans Excel avant de relancer.
+
+**Observations préliminaires** (Qwen2.5 7B, 3 parties, à confirmer sur une dizaine) :
+le mode `llm` produit des problèmes détectés automatiquement sur les 3 débriefs
+(causalité, sections écrites sans données, différences de pourcentages calculées) et
+des erreurs que seule la relecture trouve (un kill attribué au mauvais joueur) ; le
+résumé du mode hybride contenait encore des formulations causales et des fautes de
+français, d'où la reprise automatique.
 
 ### Avec Docker
 
