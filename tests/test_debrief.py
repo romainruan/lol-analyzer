@@ -65,9 +65,9 @@ ANALYSIS = {
 }
 
 
-def bench_frame():
-    # 100 mid de référence, de 1 à 10 sur chaque statistique : un percentile est facile à prévoir
-    return pd.DataFrame({c: np.linspace(1, 10, 100) for c in STAT_COLS})
+def bench_frame(role="MIDDLE", champion="Zed"):
+    # 100 joueurs de référence, de 1 à 10 sur chaque statistique : un percentile est facile à prévoir
+    return pd.DataFrame({**{c: np.linspace(1, 10, 100) for c in STAT_COLS}, "role": role, "champion": champion})
 
 
 def mid_brief():
@@ -77,7 +77,7 @@ def mid_brief():
 def crafted_brief():
     """Brief avec des percentiles choisis : CS faible, vision forte, KDA moyen."""
     facts = build_facts(ANALYSIS, _match(), _timeline(), "p3", bench_frame())
-    facts["comparaison_mid_master"] = {
+    facts["comparaison"] = {
         "cs_par_min": {"valeur": 6.8, "mediane": 7.8, "percentile": 22},
         "vision_par_min": {"valeur": 0.9, "mediane": 0.7, "percentile": 80},
         "kda_ratio": {"valeur": 2.3, "mediane": 2.3, "percentile": 50},
@@ -94,8 +94,8 @@ def test_facts_for_a_mid_game_include_stats_and_percentiles():
     assert facts["stats"]["kda"] == "6/2/6"
     assert facts["stats"]["cs_par_min"] == round(220 / 30, 1)
     expected = round(100 * (bench["cs_per_min"] < 220 / 30).mean())
-    assert facts["comparaison_mid_master"]["cs_par_min"]["percentile"] == expected
-    assert facts["comparaison_mid_master"]["cs_par_min"]["mediane"] == round(bench["cs_per_min"].median(), 1)
+    assert facts["comparaison"]["cs_par_min"]["percentile"] == expected
+    assert facts["comparaison"]["cs_par_min"]["mediane"] == round(bench["cs_per_min"].median(), 1)
     assert facts["stats"]["cs_a_10_min"] == 84
 
 
@@ -112,18 +112,19 @@ def test_facts_collapse_repeated_events_and_round_probabilities():
         "premiere_minute": 2}
 
 
-def test_facts_for_another_role_have_no_mid_comparison():
+def test_facts_without_references_for_the_role_have_no_comparison():
     facts = build_facts(ANALYSIS, _match(mid_role="TOP"), _timeline(), "p3", bench_frame())
-    assert "comparaison_mid_master" not in facts
+    assert "comparaison" not in facts
     assert facts["partie"]["role"] == "top"
     assert facts["stats"]["cs_par_min"] == round(220 / 30, 1)
 
 
 def test_facts_none_when_player_absent_and_profile_included():
     assert build_facts(ANALYSIS, _match(), _timeline(), "inconnu") is None
-    profile = (23, pd.DataFrame({"stat": ["cs_per_min"], "percentile": [16]}))
-    facts = build_facts(ANALYSIS, _match(), _timeline(), "p3", profile=profile)
-    assert facts["profil_habituel"] == {"nb_parties_mid": 23, "percentiles": {"cs_par_min": 16}}
+    profiles = {"MIDDLE": (23, pd.DataFrame({"stat": ["cs_per_min"], "percentile": [16]}), "mid Master")}
+    facts = build_facts(ANALYSIS, _match(), _timeline(), "p3", profiles=profiles)
+    assert facts["profil_habituel"] == {"nb_parties": 23, "poste": "mid", "reference": "mid Master",
+                                        "percentiles": {"cs_par_min": 16}}
 
 
 # ----------------------------------------------------------------------------- phrases
@@ -160,8 +161,8 @@ def test_brief_without_comparison_has_a_remark_and_no_strengths():
 
 
 def test_brief_includes_usual_trend_when_profile_is_given():
-    profile = (23, pd.DataFrame({"stat": ["cs_per_min", "vision_per_min"], "percentile": [16, 38]}))
-    brief = build_brief(build_facts(ANALYSIS, _match(), _timeline(), "p3", profile=profile))
+    table = pd.DataFrame({"stat": ["cs_per_min", "vision_per_min"], "percentile": [16, 38]})
+    brief = build_brief(build_facts(ANALYSIS, _match(), _timeline(), "p3", profiles={"MIDDLE": (23, table, "mid Master")}))
     assert brief["tendance_habituelle"][0] == (
         "Sur vos 23 parties mid, CS par minute : mieux que 16 % des mid Master (faible).")
 
@@ -292,11 +293,56 @@ def test_check_text_flags_a_mixed_up_transition_and_inference_markers():
     assert any("ce qui suggère" in i for i in issues)
 
 
-def test_usual_trend_is_only_given_for_games_played_mid():
-    profile = (23, pd.DataFrame({"stat": ["cs_per_min"], "percentile": [16]}))
-    jungle = build_facts(ANALYSIS, _match(mid_role="JUNGLE"), _timeline(), "p3", profile=profile)
+def test_usual_trend_is_only_given_for_the_role_it_was_measured_on():
+    profiles = {"MIDDLE": (23, pd.DataFrame({"stat": ["cs_per_min"], "percentile": [16]}), "mid Master")}
+    jungle = build_facts(ANALYSIS, _match(mid_role="JUNGLE"), _timeline(), "p3", profiles=profiles)
     assert "profil_habituel" not in jungle
-    assert "profil_habituel" in build_facts(ANALYSIS, _match(), _timeline(), "p3", profile=profile)
+    assert "profil_habituel" in build_facts(ANALYSIS, _match(), _timeline(), "p3", profiles=profiles)
+
+
+def test_usual_trend_names_the_role_played():
+    profiles = {"JUNGLE": (12, pd.DataFrame({"stat": ["vision_per_min"], "percentile": [16]}), "jungle Gold")}
+    brief = build_brief(build_facts(ANALYSIS, _match(mid_role="JUNGLE"), _timeline(), "p3", profiles=profiles))
+    assert brief["tendance_habituelle"] == [
+        "Sur vos 12 parties jungle, Vision par minute : mieux que 16 % des jungle Gold (faible)."]
+
+
+# ----------------------------------------------------------------------------- tous les postes
+def test_any_role_is_compared_to_players_of_the_same_role():
+    bench = pd.concat([bench_frame("JUNGLE"), bench_frame("MIDDLE").assign(cs_per_min=100.0)])
+    facts = build_facts(ANALYSIS, _match(mid_role="JUNGLE"), _timeline(), "p3", bench)
+    assert facts["reference"] == "jungle Master"
+    assert facts["comparaison"]["cs_par_min"]["mediane"] == 5.5  # pas les 100 CS des mid
+    brief = build_brief(facts)
+    assert "des jungle Master" in brief["points_forts"][0] or "des jungle Master" in brief["axes_de_progres"][0]
+    assert check_text(render_template(brief), brief) == []
+
+
+def test_comparison_uses_the_champion_when_it_has_enough_games():
+    bench = pd.concat([bench_frame("MIDDLE", "Zed"), bench_frame("MIDDLE", "Ahri").assign(cs_per_min=2.0)])
+    facts = build_facts(ANALYSIS, _match(), _timeline(), "p3", bench)
+    assert facts["reference"] == "Ahri mid Master"
+    assert facts["comparaison"]["cs_par_min"]["mediane"] == 2.0
+
+
+def test_support_is_not_judged_on_farm_or_damage():
+    bench = bench_frame("UTILITY")
+    brief = build_brief(build_facts(ANALYSIS, _match(mid_role="UTILITY"), _timeline(), "p3", bench))
+    text = " ".join(brief["points_forts"] + brief["axes_de_progres"])
+    for ignored in ("CS par minute", "CS à 10 minutes", "Part des dégâts"):
+        assert ignored not in text
+    table = pd.DataFrame({"stat": ["cs_per_min", "vision_per_min"], "percentile": [1, 40]})
+    profiles = {"UTILITY": (15, table, "support Master")}
+    habit = build_brief(build_facts(ANALYSIS, _match(mid_role="UTILITY"), _timeline(), "p3", profiles=profiles))
+    assert "CS par minute" not in " ".join(habit["tendance_habituelle"])
+
+
+def test_advice_matches_the_role():
+    facts = build_facts(ANALYSIS, _match(mid_role="JUNGLE"), _timeline(), "p3", bench_frame("JUNGLE"))
+    facts["comparaison"] = {"cs_par_min": {"valeur": 1.0, "mediane": 5.0, "percentile": 5},
+                            "vision_par_min": {"valeur": 9.0, "mediane": 5.0, "percentile": 95}}
+    axis = build_brief(facts)["axes_de_progres"][0]
+    assert "camps" in axis and "vagues de sbires" not in axis
 
 
 def test_check_text_flags_sections_written_without_data_and_new_causal_markers():
@@ -421,7 +467,7 @@ def test_generate_summary_gives_up_after_max_attempts():
 
 def test_no_strong_stat_is_not_called_a_strength():
     facts = build_facts(ANALYSIS, _match(), _timeline(), "p3", bench_frame())
-    facts["comparaison_mid_master"] = {
+    facts["comparaison"] = {
         "cs_par_min": {"valeur": 7.3, "mediane": 7.8, "percentile": 40},
         "vision_par_min": {"valeur": 0.7, "mediane": 0.7, "percentile": 55},
         "kda_ratio": {"valeur": 2.3, "mediane": 2.3, "percentile": 30},

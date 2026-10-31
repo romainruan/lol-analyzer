@@ -33,11 +33,20 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-from .benchmarks import STAT_COLS, build_benchmark, compare, mid_rows
+from .benchmarks import (
+    DEFAULT_BENCH,
+    MIN_REFERENCE_ROWS,
+    ROLE_NAMES,
+    STAT_COLS,
+    build_benchmark,
+    compare,
+    load_benchmarks,
+    reference_for,
+    role_rows,
+)
 from .winprob import EARLY_MINUTE, collapse_duplicates, format_gaps
 
 DEFAULT_MODEL = "qwen2.5:7b"
-MIN_BENCH_ROWS = 50
 MIN_PROFILE_GAMES = 10
 RATING_LOW, RATING_HIGH = 25, 75  # percentiles : <= 25 faible, >= 75 fort
 
@@ -75,6 +84,23 @@ ADVICE = {
     "cs_a_10_min": "en début de partie, privilégier les derniers coups sur les sbires avant les échanges.",
     "or_a_10_min": "soigner la phase de lane : farm et échanges avantageux.",
     "xp_a_10_min": "soigner la phase de lane : rester en position pour récupérer l'expérience des vagues.",
+}
+
+# Ce qui change selon le poste. Un support n'a pas à farmer, et sa part des dégâts dépend surtout du champion.
+IGNORED_STATS = {"UTILITY": {"cs_par_min", "cs_a_10_min", "part_degats_pct"}}
+ADVICE_BY_ROLE = {
+    "JUNGLE": {
+        "cs_par_min": "enchaîner les camps sans temps mort, en optimisant le chemin dans la jungle.",
+        "cs_a_10_min": "soigner le premier tour de jungle pour ne perdre aucun camp.",
+        "or_a_10_min": "enchaîner les camps entre les actions, sans attendre une action qui ne vient pas.",
+        "xp_a_10_min": "enchaîner les camps entre les actions, sans attendre une action qui ne vient pas.",
+        "participation_kills_pct": "se placer près des lanes qui peuvent se battre et près des objectifs.",
+    },
+    "UTILITY": {
+        "or_a_10_min": "soigner la phase de lane : échanges avantageux et quêtes de support terminées tôt.",
+        "xp_a_10_min": "rester à portée de l'expérience des vagues, sauf pour un déplacement qui rapporte.",
+        "participation_kills_pct": "se déplacer vers les combats quand la lane le permet.",
+    },
 }
 
 SYSTEM_PROMPT = """Tu es un rédacteur. Tu transformes des FAITS déjà analysés en débrief de \
@@ -173,9 +199,11 @@ def build_facts(
     timeline: dict | None,
     puuid: str,
     bench: pd.DataFrame | None = None,
-    profile: tuple[int, pd.DataFrame] | None = None,
+    profiles: dict[str, tuple[int, pd.DataFrame, str]] | None = None,
 ) -> dict | None:
-    """Chiffres d'une partie du point de vue du joueur. None si le joueur n'y figure pas."""
+    """Chiffres d'une partie du point de vue du joueur. None si le joueur n'y figure pas.
+
+    `profiles` : par poste, (nombre de parties du joueur, sa comparaison à la référence, nom de la référence)."""
     info = match["info"]
     me = next((p for p in info["participants"] if p.get("puuid") == puuid), None)
     if me is None:
@@ -190,22 +218,23 @@ def build_facts(
             "resultat": analysis["perspective"]["result"],
             "duree_min": int(round(minutes)),
         },
+        "poste": role,
         "stats": {"kda": f"{me.get('kills', 0)}/{me.get('deaths', 0)}/{me.get('assists', 0)}"},
     }
 
-    row = None
-    if role == "MIDDLE":
-        row = next((r for r in mid_rows(match, timeline) if r["puuid"] == puuid), None)
+    row = next((r for r in role_rows(match, timeline) if r["puuid"] == puuid), None)
     if row is not None:
         for col, (name, _, _) in STAT_FORMAT.items():
             if row.get(col) is not None and not pd.isna(row[col]):
                 facts["stats"][name] = _format(col, row[col])
-        if bench is not None and len(bench) >= MIN_BENCH_ROWS:
-            facts["comparaison_mid_master"] = {
+        reference, label = reference_for(bench, role, me.get("championName")) if bench is not None else ([], "")
+        if len(reference) >= MIN_REFERENCE_ROWS:
+            facts["reference"] = label
+            facts["comparaison"] = {
                 STAT_FORMAT[col][0]: {
                     "valeur": _format(col, row[col]),
-                    "mediane": _format(col, bench[col].median()),
-                    "percentile": _percentile(row[col], bench[col]),
+                    "mediane": _format(col, reference[col].median()),
+                    "percentile": _percentile(row[col], reference[col]),
                 }
                 for col in STAT_COLS
                 if row.get(col) is not None and not pd.isna(row[col])
@@ -213,10 +242,12 @@ def build_facts(
     else:
         facts["stats"].update(_basic_stats(me, minutes))
 
-    if profile is not None and role == "MIDDLE":
-        n_games, table = profile
+    if profiles and role in profiles:
+        n_games, table, label = profiles[role]
         facts["profil_habituel"] = {
-            "nb_parties_mid": n_games,
+            "nb_parties": n_games,
+            "poste": ROLE_NAMES[role],
+            "reference": label,
             "percentiles": {STAT_FORMAT[r["stat"]][0]: int(r["percentile"])
                             for _, r in table.iterrows() if r["stat"] in STAT_FORMAT},
         }
@@ -267,10 +298,10 @@ def _rating(percentile: int) -> str:
     return "fort" if percentile >= RATING_HIGH else "dans la moyenne"
 
 
-def _stat_sentence(name: str, d: dict) -> str:
+def _stat_sentence(name: str, d: dict, reference: str) -> str:
     label, unit = LABELS[name]
-    return (f"{label} : {_fr(d['valeur'])}{unit} (médiane des mid Master : {_fr(d['mediane'])}{unit}), "
-            f"mieux que {d['percentile']} % des mid Master : {_rating(d['percentile'])}.")
+    return (f"{label} : {_fr(d['valeur'])}{unit} (médiane des {reference} : {_fr(d['mediane'])}{unit}), "
+            f"mieux que {d['percentile']} % des {reference} : {_rating(d['percentile'])}.")
 
 
 def _moment_sentence(m: dict) -> str:
@@ -314,22 +345,26 @@ def build_brief(facts: dict) -> dict:
         f"{m['minute']}e minute : la probabilité de victoire de l'équipe passe de "
         f"{m['avant_pct']} % à {m['apres_pct']} %." for m in facts["moments_cles"]]
 
-    comp = {k: v for k, v in facts.get("comparaison_mid_master", {}).items() if k in LABELS}
+    role = facts.get("poste")
+    ignored = IGNORED_STATS.get(role, set())
+    advice = {**ADVICE, **ADVICE_BY_ROLE.get(role, {})}
+    reference = facts.get("reference", "")
+    comp = {k: v for k, v in facts.get("comparaison", {}).items() if k in LABELS and k not in ignored}
     if comp:
         ranked = sorted(comp.items(), key=lambda kv: kv[1]["percentile"])
         strong = [(k, v) for k, v in ranked[::-1] if _rating(v["percentile"]) == "fort"][:2]
         if strong:
-            brief["points_forts"] = [_stat_sentence(k, v) for k, v in strong]
+            brief["points_forts"] = [_stat_sentence(k, v, reference) for k, v in strong]
         else:  # on n'appelle pas « point fort » une statistique simplement dans la moyenne
             k, v = ranked[-1]
-            brief["points_forts"] = ["Aucune statistique ne se démarque nettement au-dessus des "
-                                     "mid Master. La plus haute : " + _stat_sentence(k, v)]
+            brief["points_forts"] = [f"Aucune statistique ne se démarque nettement au-dessus des {reference}. "
+                                     "La plus haute : " + _stat_sentence(k, v, reference)]
         axes = []
         for k, v in ranked[:2]:
-            sentence = _stat_sentence(k, v)
+            sentence = _stat_sentence(k, v, reference)
             if _rating(v["percentile"]) != "faible":
                 sentence = sentence[:-1] + " (parmi les plus basses de cette partie, sans être faible)."
-            axes.append(f"{sentence} Conseil : {ADVICE[k]}")
+            axes.append(f"{sentence} Conseil : {advice[k]}")
         brief["axes_de_progres"] = axes
     else:
         brief["remarque"] = "Pas de repères de comparaison disponibles pour cette partie."
@@ -339,11 +374,13 @@ def build_brief(facts: dict) -> dict:
 
     habit = facts.get("profil_habituel")
     if habit:
-        low = sorted(habit["percentiles"].items(), key=lambda kv: kv[1])[:2]
-        brief["tendance_habituelle"] = [
-            f"Sur vos {habit['nb_parties_mid']} parties mid, {LABELS[k][0]} : "
-            f"mieux que {p} % des mid Master ({_rating(p)})." for k, p in low if k in LABELS
-        ]
+        kept = [(k, p) for k, p in habit["percentiles"].items() if k in LABELS and k not in ignored]
+        low = sorted(kept, key=lambda kv: kv[1])[:2]
+        if low:
+            brief["tendance_habituelle"] = [
+                f"Sur vos {habit['nb_parties']} parties {habit['poste']}, {LABELS[k][0]} : "
+                f"mieux que {p} % des {habit['reference']} ({_rating(p)})." for k, p in low
+            ]
     return brief
 
 
@@ -820,7 +857,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--raw-dir", default="data/raw/me", help="parties brutes + puuid.txt")
     p.add_argument("--curves", default="results/curves")
-    p.add_argument("--bench", default="data/mid_benchmarks.csv")
+    p.add_argument("--bench", default=str(DEFAULT_BENCH))
     p.add_argument("--out", default="results/debriefs")
     p.add_argument("--match-id")
     p.add_argument("--limit", type=int, default=3)
@@ -852,15 +889,17 @@ def main() -> None:
         raise SystemExit(f"{puuid_file} introuvable : lancez d'abord `python -m src.collect --riot-id ...`.")
     puuid = puuid_file.read_text(encoding="utf-8").strip()
 
-    bench = pd.read_csv(args.bench) if Path(args.bench).exists() else None
+    bench = load_benchmarks(args.bench)
     if bench is None:
-        print("(Pas de data/mid_benchmarks.csv : lancez `python -m src.benchmarks` pour comparer aux mid Master.)")
-    profile = None
+        print(f"(Pas de {args.bench} : lancez `python -m src.benchmarks` pour comparer vos parties à des repères.)")
+    profiles = {}
     if bench is not None:
         mine = build_benchmark(raw_dir)
         mine = mine[mine["puuid"] == puuid] if not mine.empty else mine
-        if len(mine) >= MIN_PROFILE_GAMES:
-            profile = (len(mine), compare(mine, bench))
+        for role, rows in mine.groupby("role") if not mine.empty else ():
+            reference, label = reference_for(bench, role)
+            if len(rows) >= MIN_PROFILE_GAMES and len(reference) >= MIN_REFERENCE_ROWS:
+                profiles[role] = (len(rows), compare(rows, reference), label)
 
     exclude = reviewed_ids(Path(args.out) / "review.csv") if args.only_unreviewed else None
     ids = _select_ids(curves_dir, args.match_id, args.limit, exclude)
@@ -882,7 +921,7 @@ def main() -> None:
         tl_path = raw_dir / "timelines" / f"{match_id}.json"
         timeline = json.loads(tl_path.read_text(encoding="utf-8")) if tl_path.exists() else None
 
-        facts = build_facts(analysis, match, timeline, puuid, bench, profile)
+        facts = build_facts(analysis, match, timeline, puuid, bench, profiles)
         if facts is None:
             print(f"{match_id} : vous n'apparaissez pas dans cette partie, ignorée.")
             continue
