@@ -141,6 +141,13 @@ d'un modèle entraîné sur les parties les plus anciennes et testé sur les 20 
 avec `--patch-holdout`, l'AUC de chaque patch mis de côté (entraînement sur les autres).
 `analyze --skip-existing` ne traite que les parties sans courbe.
 
+`train --calibration` compare, par phase de jeu (2-5, 6-10, 11-15, 16-25 et 26-40 minutes), la probabilité
+annoncée au taux de victoire réel, hors échantillon, et écrit `results/curve_calibration.csv`. L'AUC dit si
+le modèle classe bien les parties ; seule la calibration dit si « 62 % » veut vraiment dire 62 %.
+
+Chaque moment clé indique aussi `contributions` : les points du saut répartis entre `ressources` (or, XP,
+niveaux, CS), `combats`, `objectifs` et `vision`. C'est ce qui a fait bouger la prédiction, pas une cause.
+
 Un seul modèle (régression logistique) sert pour toutes les minutes : le poids de
 chaque variable évolue avec le temps. Pour chaque partie analysée, `results/curves/`
 contient un graphique (probabilité de victoire minute par minute, vue de votre
