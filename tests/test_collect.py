@@ -49,6 +49,41 @@ def test_collect_for_puuid_can_skip_the_most_recent_games(tmp_path):
     assert calls == [("p1", 100, 100)]
 
 
+class PagedClient:
+    """Riot refuse plus de 100 identifiants par appel : ce faux client vérifie qu'on ne les demande jamais."""
+
+    def __init__(self, available):
+        self.available = available
+        self.calls = []
+
+    def get_match_ids(self, puuid, start=0, count=20, start_time=None):
+        assert count <= 100
+        self.calls.append((start, count))
+        return [f"EUW1_{i}" for i in range(start, min(start + count, self.available))]
+
+    def get_match(self, match_id):
+        return {"metadata": {"matchId": match_id}}
+
+    def get_timeline(self, match_id):
+        return {"info": {"frames": []}}
+
+
+def test_more_than_100_games_are_fetched_page_by_page(tmp_path):
+    from src.collect import collect_for_puuid
+
+    client = PagedClient(available=1000)
+    assert collect_for_puuid(client, "p1", tmp_path, count=250, start=10) == 250
+    assert client.calls == [(10, 100), (110, 100), (210, 50)]
+
+
+def test_paging_stops_at_the_end_of_the_history(tmp_path):
+    from src.collect import collect_for_puuid
+
+    client = PagedClient(available=130)
+    assert collect_for_puuid(client, "p1", tmp_path, count=500) == 130
+    assert client.calls == [(0, 100), (100, 100)]
+
+
 def test_since_is_given_to_riot_as_a_timestamp(tmp_path):
     from src.collect import collect_for_puuid, date_to_timestamp
 

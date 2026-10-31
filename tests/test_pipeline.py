@@ -82,6 +82,14 @@ def test_report_without_a_model_still_gives_the_trends(project, capsys):
     assert "src.run prepare" in capsys.readouterr().out
 
 
+def test_references_can_be_kept_in_another_file(project):
+    run.main(["prepare", "--tier", "MASTER", "--max-players", "70", "--per-player", "1", "--label", "Gold",
+              "--bench", "data/gold.csv"])
+    assert not Path("data/benchmarks.csv").exists()
+    report("--bench", "data/gold.csv")
+    assert "des mid Gold" in Path("results/report.html").read_text(encoding="utf-8")
+
+
 def test_report_can_reuse_games_already_downloaded(project, monkeypatch):
     prepare()
     report()
@@ -136,6 +144,94 @@ def test_prepare_without_data_explains_what_is_missing(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit, match="Moins de 50 parties|Aucune partie"):
         run.main(["prepare", "--tier", "MASTER", "--no-collect"])
+
+
+def test_model_evaluations_run_from_the_command_line(project, capsys):
+    from src import build_dataset, collect, train, winprob
+
+    collect.main(["--tier", "MASTER", "--max-players", "70", "--per-player", "1"])
+    build_dataset.main(["--out", "data/d5.csv"])
+    train.main(["--data", "data/d5.csv", "--out", "results", "--folds", "2"])
+    for name in ("metrics_by_minute.csv", "auc_by_minute.png", "lane_coefficients.csv", "calibration.csv"):
+        assert Path("results", name).exists(), name
+    build_dataset.main(["--all-minutes", "--out", "data/d.csv"])
+    winprob.main(["train", "--data", "data/d.csv", "--model", "results/m.joblib", "--time-split", "0.2",
+                  "--patch-holdout", "--kind", "monotone", "--features", "etendu"])
+    out = capsys.readouterr().out
+    assert "Test dans le temps" in out and "auc_lo" in out
+    assert "Aucun patch avec assez de parties" in out  # 70 parties : pas assez pour un test par patch
+    assert "poids sont négatifs" not in out
+
+
+def test_free_model_warns_that_it_cannot_explain_the_jumps(project, capsys):
+    from src import build_dataset, collect, winprob
+
+    collect.main(["--tier", "MASTER", "--max-players", "70", "--per-player", "1"])
+    build_dataset.main(["--all-minutes", "--out", "data/d.csv"])
+    winprob.main(["train", "--data", "data/d.csv", "--model", "results/m.joblib"])
+    assert "--kind monotone" in capsys.readouterr().out
+
+
+def test_progress_command_prints_trends_and_priorities(project, capsys):
+    from src import progress
+
+    with pytest.raises(SystemExit, match="collect --riot-id"):
+        progress.main([])
+    prepare()
+    report()
+    capsys.readouterr()
+    progress.main(["--window", "3"])
+    out = capsys.readouterr().out
+    assert "parties, poste principal : mid" in out
+    assert "À travailler en priorité" in out and "Conseil" in out
+    assert "Ahri" in out and "Syndra" in out
+
+
+def test_progress_command_without_references_says_how_to_get_them(project, capsys):
+    from src import progress
+
+    report()
+    capsys.readouterr()
+    progress.main([])
+    assert "src.benchmarks" in capsys.readouterr().out
+
+
+def test_debrief_dry_run_shows_the_prompt_without_calling_a_model(project, monkeypatch, capsys):
+    from src import debrief
+
+    def no_model(*a, **kw):
+        raise AssertionError("aucun appel au modèle attendu")
+
+    prepare()
+    report()
+    monkeypatch.setattr("src.debrief.chat", no_model)
+    capsys.readouterr()
+    debrief.main(["--limit", "1", "--dry-run"])
+    assert "FAITS" in capsys.readouterr().out
+
+
+def test_debrief_recheck_runs_from_the_command_line(project, capsys):
+    from src import debrief
+
+    prepare()
+    report()
+    capsys.readouterr()
+    debrief.main(["--recheck", "results/debriefs"])
+    assert "0 résumés" in capsys.readouterr().out  # des gabarits uniquement : aucun résumé de modèle à rejouer
+
+
+def test_commands_explain_what_is_missing(tmp_path, monkeypatch):
+    from src import build_dataset, debrief, run, winprob
+
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit, match="src.collect"):
+        build_dataset.main([])
+    with pytest.raises(SystemExit, match="src.build_dataset"):
+        winprob.main(["compare"])
+    with pytest.raises(SystemExit, match="collect --riot-id"):
+        debrief.main([])
+    with pytest.raises(SystemExit, match="--riot-id"):
+        run.main(["report"])
 
 
 def test_commands_accept_their_arguments_when_called_directly(project, monkeypatch):

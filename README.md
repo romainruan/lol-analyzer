@@ -83,6 +83,9 @@ cp .env.example .env        # puis collez votre clé Riot dans .env
 python -m pytest -q         # les tests ne nécessitent pas de clé
 ```
 
+`requirements.lock` donne les versions exactes utilisées par l'image Docker et par la CI, pour tout reproduire à
+l'identique : un modèle enregistré dépend de sa version de scikit-learn.
+
 ### En deux commandes
 
 ```bash
@@ -106,13 +109,14 @@ pas votre puuid, mais il contient vos identifiants de parties : à partager en c
 - `--no-collect` réutilise les parties déjà téléchargées, sans appeler Riot.
 - `--platform kr` choisit un autre serveur : la région de routage s'en déduit.
 - `prepare --kind` et `--features` choisissent le modèle (voir section 5), `--label` le nom de l'échantillon.
+- `--bench data/gold.csv`, sur les deux commandes, garde des repères par rang dans des fichiers séparés.
 
 Les sections suivantes détaillent chaque étape.
 
 ### 1. Collecter des données
 
 ```bash
-# vos parties classées (100 au plus par appel ; --start 100 remonte plus loin dans l'historique)
+# vos parties classées, de la plus récente à la plus ancienne (--start 100 saute les 100 plus récentes)
 python -m src.collect --riot-id "VotrePseudo#EUW" --count 100
 
 # un échantillon de joueurs Master pour entraîner le modèle (500 joueurs, 5 parties chacun)
@@ -341,8 +345,13 @@ n'est publié, ce qui évite tout conflit avec un Ollama déjà lancé sur votre
   complétée par un test dans le temps et un test par patch.
 - AUC avec intervalle de confiance bootstrap, log-loss et calibration, pas seulement la précision.
 - Aucune fuite de données : à la minute N, seules les informations antérieures à N sont utilisées.
+- Modèles comparés sur les mêmes lignes, avec un gain de log-loss et un intervalle rééchantillonnés par partie
+  (`winprob compare`), et calibration mesurée par phase de jeu pour le modèle de la courbe.
 - Débriefs : le code calcule, le modèle ne rédige que le résumé, chaque texte est contrôlé, et la
-  fidélité est mesurée par relecture manuelle (`docs/review.csv`).
+  fidélité est mesurée par relecture manuelle (`docs/review.csv`). Un nouveau contrôle peut être rejoué sur les
+  résumés déjà relus, sans LLM (`debrief --recheck`).
+- Tests : toute la chaîne tourne de bout en bout sur des parties synthétiques au format Riot. La CI vérifie aussi les
+  versions figées, les dernières versions disponibles et l'image Docker.
 
 ## Limites connues
 

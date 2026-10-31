@@ -211,6 +211,16 @@ def test_analyze_explains_a_missing_model(tmp_path):
         cmd_analyze(args)
 
 
+@pytest.mark.parametrize("command", [["compare", "--time-split", "0.2"], ["learning-curve"]])
+def test_commands_explain_that_an_old_dataset_must_be_rebuilt(tmp_path, command):
+    from src.winprob import main
+
+    path = tmp_path / "ancien.csv"
+    collinear_games(60).drop(columns="game_creation").to_csv(path, index=False)
+    with pytest.raises(SystemExit, match="game_creation.*build_dataset"):
+        main([*command, "--data", str(path)])
+
+
 def test_train_explains_that_extended_features_need_a_rebuilt_dataset(tmp_path):
     import argparse
 

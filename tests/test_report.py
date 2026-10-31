@@ -147,6 +147,20 @@ def test_report_ignores_an_analysis_without_its_game(tmp_path):
     assert html.count('class="curve"') == 2
 
 
+def test_report_ignores_an_analysis_without_a_curve(tmp_path):
+    raw, ids = _player_dir(tmp_path, n_games=2)
+    curves = _curves(tmp_path, ids)
+    (curves / f"{ids[0]}.json").write_text(json.dumps({**ANALYSIS, "match_id": ids[0], "curve": []}), encoding="utf-8")
+    assert build_report(raw, curves, tmp_path / "absent", None).count('class="curve"') == 1
+
+
+def test_key_moments_close_to_each_other_do_not_share_a_label_position():
+    moments = [{"minute": m, "win_prob_before": 0.4, "win_prob_after": 0.5, "events": []} for m in (10, 11)]
+    close = {**ANALYSIS, "curve": [{"minute": m, "win_prob": 0.5} for m in range(2, 30)], "turning_points": moments}
+    tags = re.findall(r'<text class="tag" x="([\d.]+)" y="([\d.]+)" text-anchor="middle">', curve_svg(close))
+    assert len(tags) == 2 and tags[0][1] != tags[1][1]
+
+
 def test_main_writes_a_utf8_file(tmp_path):
     raw, ids = _player_dir(tmp_path)
     out = tmp_path / "sortie" / "rapport.html"

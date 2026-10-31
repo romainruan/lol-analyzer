@@ -17,7 +17,7 @@ services:
   # avec un Ollama déjà lancé sur la machine (port 11434).
   # GPU NVIDIA : ajouter  -f docker-compose.gpu.yml  à la commande (voir README).
   ollama:
-    image: ollama/ollama
+    image: ollama/ollama:0.40.13
     volumes:
       - ollama_data:/root/.ollama
 

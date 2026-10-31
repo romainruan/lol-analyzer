@@ -515,14 +515,18 @@ def _load(raw_dir: Path, match_id: str) -> tuple[dict, dict]:
     return match, timeline
 
 
+def _load_columns(path: str, columns: list[str]) -> pd.DataFrame:
+    df = load_dataset(path)
+    missing = sorted(set(columns) - set(df.columns))
+    if missing:
+        raise SystemExit(f"Colonnes absentes de {path} ({', '.join(missing)}) : "
+                         "reconstruisez le jeu de données avec `python -m src.build_dataset`.")
+    return df
+
+
 def cmd_train(args: argparse.Namespace) -> None:
     kind, features = args.kind, FEATURE_SETS[args.features]
-    df = load_dataset(args.data)
-    missing = sorted(set(features) - set(df.columns))
-    if missing:
-        raise SystemExit(f"Colonnes absentes de {args.data} ({', '.join(missing)}) : "
-                         "reconstruisez le jeu de données avec `python -m src.build_dataset`.")
-    df = df.dropna(subset=features)
+    df = _load_columns(args.data, features).dropna(subset=features)
     if df["match_id"].nunique() < 50:
         raise SystemExit("Moins de 50 parties : collectez davantage avant d'entraîner.")
     scores = evaluate_curve_model(df, kind=kind, features=features)
@@ -563,7 +567,8 @@ def cmd_train(args: argparse.Namespace) -> None:
 
 
 def cmd_compare(args: argparse.Namespace) -> None:
-    df = load_dataset(args.data).dropna(subset=BASE_FEATURES)
+    needed = BASE_FEATURES + (["game_creation"] if args.time_split else [])
+    df = _load_columns(args.data, needed).dropna(subset=BASE_FEATURES)
     table = compare_models(df, args.folds, args.time_split, args.boot)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -581,8 +586,9 @@ def cmd_compare(args: argparse.Namespace) -> None:
 
 
 def cmd_learning_curve(args: argparse.Namespace) -> None:
-    df = load_dataset(args.data).dropna(subset=BASE_FEATURES)
-    table = learning_curve(df, kind=args.kind, features=FEATURE_SETS[args.features])
+    features = FEATURE_SETS[args.features]
+    df = _load_columns(args.data, [*features, "game_creation"]).dropna(subset=features)
+    table = learning_curve(df, kind=args.kind, features=features)
     print("Score sur les 20 % de parties les plus récentes, selon le nombre de parties d'entraînement :")
     print(table.round(4).to_string(index=False))
 
