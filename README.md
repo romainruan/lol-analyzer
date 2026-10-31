@@ -69,7 +69,7 @@ fautive si au moins une erreur de chiffre, d'invention ou d'omission a été tro
 | Hybride v5.1 (12 parties) | 2 sur 12 |
 | **Hybride v5.2 (39 parties jamais relues)** | **2 sur 39 (5 %, intervalle à 95 % : 1 à 17 %)** |
 
-Réserves : v4 à v5.1 : mesurés sur les mêmes 12 parties, contrôles ajustés au fil des erreurs. v5.2 : mesurée sur 39 parties nouvelles, contrôles figés avant la mesure ; 4 résumés ont été remplacés par le texte du code après 3 échecs du modèle. Un seul relecteur.
+Réserves : v4 à v5.1 : mesurés sur les mêmes 12 parties, contrôles ajustés au fil des erreurs. v5.2 : mesurée sur 39 parties nouvelles, contrôles figés avant la mesure ; 4 résumés ont été remplacés par le texte du code après 3 échecs du modèle. Un seul relecteur. Comptage souple : 6 autres débriefs v5.2 contiennent une affirmation notée « non vérifiable » dans la relecture (« reste à 95 % », « se stabilise ») et comptent pour 0 erreur. En les comptant comme fautifs, le score devient 8 sur 39 (21 %, intervalle à 95 % : 11 à 36 %).
 
 **Pistes** : repères par rang (Grandmaster), percentile de votre moyenne parmi les
 moyennes de joueurs (voir Limites), choix du modèle par défaut d'après `winprob compare`.
