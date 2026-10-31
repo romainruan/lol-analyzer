@@ -89,14 +89,8 @@ def evaluate_curve_model(df: pd.DataFrame, n_splits: int = 5) -> pd.DataFrame:
     return out
 
 
-def evaluate_time_split(df: pd.DataFrame, test_fraction: float = 0.2) -> pd.DataFrame:
-    """Test dans le temps : on entraîne sur les parties les plus anciennes et on mesure l'AUC sur
-    les plus récentes, ce qu'une validation croisée ne fait pas (elle mélange les dates)."""
-    starts = df.groupby("match_id")["game_creation"].first().sort_values()
-    n_test = max(1, int(round(len(starts) * test_fraction)))
-    test_ids = set(starts.index[-n_test:])
-    is_test = df["match_id"].isin(test_ids)
-    train, test = df[~is_test], df[is_test]
+def _split_auc(train: pd.DataFrame, test: pd.DataFrame) -> pd.DataFrame:
+    """Entraîne sur `train`, mesure l'AUC sur `test` aux minutes repères."""
     proba = fit_curve_model(train).predict_proba(design_matrix(test))[:, 1]
     rows = []
     for m in REPORT_MINUTES:
@@ -105,9 +99,33 @@ def evaluate_time_split(df: pd.DataFrame, test_fraction: float = 0.2) -> pd.Data
             rows.append({"minute": m, "n_games": int(mask.sum()),
                          "auc": roc_auc_score(test.loc[mask, "blue_win"], proba[mask])})
     out = pd.DataFrame(rows)
-    out.attrs.update(n_train=int(train["match_id"].nunique()), n_test=len(test_ids),
+    out.attrs.update(n_train=int(train["match_id"].nunique()), n_test=int(test["match_id"].nunique()),
                      log_loss=log_loss(test["blue_win"], proba))
     return out
+
+
+def evaluate_time_split(df: pd.DataFrame, test_fraction: float = 0.2) -> pd.DataFrame:
+    """Test dans le temps : on entraîne sur les parties les plus anciennes et on mesure l'AUC sur
+    les plus récentes, ce qu'une validation croisée ne fait pas (elle mélange les dates)."""
+    starts = df.groupby("match_id")["game_creation"].first().sort_values()
+    n_test = max(1, int(round(len(starts) * test_fraction)))
+    is_test = df["match_id"].isin(set(starts.index[-n_test:]))
+    return _split_auc(df[~is_test], df[is_test])
+
+
+def evaluate_patch_holdout(df: pd.DataFrame, min_games: int = 300) -> pd.DataFrame:
+    """Un patch à la fois est mis de côté pour le test, le modèle est entraîné sur tous les autres :
+    on mesure si le modèle tient d'un patch à l'autre. Les patchs de moins de `min_games` parties
+    ne servent qu'à l'entraînement."""
+    games = df.groupby("patch")["match_id"].nunique()
+    parts = []
+    for patch in games[games >= min_games].index:
+        is_test = df["patch"] == patch
+        r = _split_auc(df[~is_test], df[is_test])
+        r.insert(0, "patch", f"{float(patch):.2f}")
+        r["n_train"] = r.attrs["n_train"]
+        parts.append(r)
+    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
 
 
 # ----------------------------------------------------------------------------- analyse
@@ -286,6 +304,13 @@ def cmd_train(args: argparse.Namespace) -> None:
                   f"testé sur les {ts.attrs['n_test']} plus récentes")
             print(ts.round(3).to_string(index=False))
             print(f"Log-loss : {ts.attrs['log_loss']:.3f}")
+    if args.patch_holdout:
+        ph = evaluate_patch_holdout(df)
+        if ph.empty:
+            print("\n(Aucun patch avec assez de parties pour un test par patch.)")
+        else:
+            print("\nTest par patch (entraîné sur tous les autres patchs) :")
+            print(ph.round(3).to_string(index=False))
     model = fit_curve_model(df)
     out = Path(args.model)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -347,6 +372,8 @@ def main() -> None:
     t.add_argument("--time-split", type=float, default=0.0, metavar="FRACTION",
                    help="ex. 0.2 : teste aussi sur les 20 %% de parties les plus récentes, "
                         "entraînement sur les autres")
+    t.add_argument("--patch-holdout", action="store_true",
+                   help="teste aussi chaque patch (300 parties au moins) en entraînant sur les autres")
     t.set_defaults(func=cmd_train)
 
     a = sub.add_parser("analyze", help="courbe et moments clés de vos parties")

@@ -190,3 +190,26 @@ def test_time_split_trains_on_old_games_and_tests_on_the_newest():
     assert ts.attrs["n_test"] == 50 and ts.attrs["n_train"] == 150
     assert list(ts["minute"]) == list(REPORT_MINUTES)
     assert (ts["auc"] > 0.7).all()  # le signal appris sur les anciennes parties vaut sur les récentes
+
+
+def test_patch_holdout_tests_each_big_patch_on_the_others():
+    import numpy as np
+    import pandas as pd
+    from src.train import BASE_FEATURES
+    from src.winprob import REPORT_MINUTES, evaluate_patch_holdout
+
+    rng = np.random.default_rng(1)
+    rows = []
+    for g in range(380):
+        patch = 16.19 if g < 20 else (16.20 if g < 200 else 16.21)
+        gold = rng.normal(0, 1500)
+        win = int(gold + rng.normal(0, 1500) > 0)
+        for m in REPORT_MINUTES:
+            row = {"match_id": f"EUW1_{g}", "patch": patch, "minute": m, "blue_win": win}
+            row.update({f: (gold if f == "gold_diff" else 0.0) for f in BASE_FEATURES})
+            rows.append(row)
+    ph = evaluate_patch_holdout(pd.DataFrame(rows), min_games=100)
+    assert sorted(ph["patch"].unique()) == ["16.20", "16.21"]  # 16.19 (20 parties) ne sert qu'à l'entraînement
+    first = ph[ph["patch"] == "16.20"].iloc[0]
+    assert first["n_train"] == 200  # 380 - 180 parties du patch testé
+    assert (ph["auc"] > 0.7).all()
