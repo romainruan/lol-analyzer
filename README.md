@@ -17,13 +17,13 @@ LLM local (Ollama). Le tout conteneurisé avec Docker.
 
 ## Résultats
 
-**Modèle de probabilité** : environ 850 parties de joueurs Master, validation croisée par partie,
+**Modèle de probabilité** : environ 3 200 parties de joueurs Master, validation croisée par partie,
 régression logistique sur les écarts d'équipe (AUC avec intervalle de confiance à 95 % par bootstrap).
 
 | Minute | 5 | 10 | 15 | 20 | 25 |
 |---|---|---|---|---|---|
-| AUC | 0,65 | 0,75 | 0,85 | 0,88 | 0,89 |
-| Intervalle | 0,62 à 0,69 | 0,72 à 0,78 | 0,82 à 0,87 | 0,86 à 0,91 | 0,86 à 0,91 |
+| AUC | 0,67 | 0,77 | 0,84 | 0,87 | 0,89 |
+| Intervalle | 0,65 à 0,69 | 0,75 à 0,78 | 0,82 à 0,85 | 0,86 à 0,88 | 0,87 à 0,90 |
 
 Le gradient boosting et le modèle avec l'écart d'or par lane n'apportent rien de significatif
 de plus : à cette taille d'échantillon, le modèle linéaire suffit.
