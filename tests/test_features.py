@@ -87,3 +87,12 @@ def test_skips_partial_last_frame():
     frames.append({**_frame(10, 500, 500), "timestamp": 10 * 60_000 - 30_000})  # fin de partie
     rows = build_rows(_match(True), {"info": {"frames": frames}}, minutes=(10,))
     assert rows == []
+
+
+def test_skips_remakes_only():
+    timeline = {"info": {"frames": [_frame(i, 500, 500) for i in range(6)]}}
+    match = _match(True)
+    match["info"]["gameEndedInEarlySurrender"] = True
+    assert build_rows(match, timeline, minutes=(2, 3)) == []
+    match["info"]["gameEndedInEarlySurrender"] = False
+    assert [r["minute"] for r in build_rows(match, timeline, minutes=(2, 3))] == [2, 3]

@@ -201,7 +201,7 @@ def test_patch_holdout_tests_each_big_patch_on_the_others():
     rng = np.random.default_rng(1)
     rows = []
     for g in range(380):
-        patch = 16.19 if g < 20 else (16.20 if g < 200 else 16.21)
+        patch = "16.19" if g < 20 else ("16.20" if g < 200 else "16.21")
         gold = rng.normal(0, 1500)
         win = int(gold + rng.normal(0, 1500) > 0)
         for m in REPORT_MINUTES:
@@ -213,3 +213,27 @@ def test_patch_holdout_tests_each_big_patch_on_the_others():
     first = ph[ph["patch"] == "16.20"].iloc[0]
     assert first["n_train"] == 200  # 380 - 180 parties du patch testé
     assert (ph["auc"] > 0.7).all()
+
+
+def test_patches_16_1_and_16_10_stay_distinct_after_a_csv_round_trip(tmp_path):
+    import numpy as np
+    import pandas as pd
+    from src.train import BASE_FEATURES
+    from src.winprob import REPORT_MINUTES, evaluate_patch_holdout, load_dataset
+
+    rng = np.random.default_rng(2)
+    rows = []
+    for g in range(200):
+        gold = rng.normal(0, 1500)
+        win = int(gold + rng.normal(0, 1500) > 0)
+        for m in REPORT_MINUTES:
+            row = {"match_id": f"EUW1_{g}", "patch": "16.1" if g < 100 else "16.10",
+                   "minute": m, "blue_win": win}
+            row.update({f: (gold if f == "gold_diff" else 0.0) for f in BASE_FEATURES})
+            rows.append(row)
+    path = tmp_path / "dataset.csv"
+    pd.DataFrame(rows).to_csv(path, index=False)
+
+    ph = evaluate_patch_holdout(load_dataset(path), min_games=100)
+    assert sorted(ph["patch"].unique()) == ["16.1", "16.10"]
+    assert (ph["n_train"] == 100).all()

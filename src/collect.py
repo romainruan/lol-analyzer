@@ -42,7 +42,10 @@ def resolve_puuid(client: RiotClient, entry: dict) -> str | None:
 
 def save_json(path: Path, obj: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(obj), encoding="utf-8")
+    # écriture puis renommage : une interruption ne laisse jamais de JSON tronqué à ce nom
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(obj), encoding="utf-8")
+    tmp.replace(path)
 
 
 def collect_match(client: RiotClient, match_id: str, raw_dir: Path) -> bool:

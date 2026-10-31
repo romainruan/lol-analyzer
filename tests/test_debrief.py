@@ -461,6 +461,19 @@ def test_review_sheet_update_keeps_manual_columns(tmp_path):
     assert data[0]["erreurs_chiffres"] == "2" and data[0]["remarques"] == "OK sinon"
 
 
+def test_review_sheet_saved_by_excel_with_a_bom_keeps_manual_columns(tmp_path):
+    path = tmp_path / "review.csv"
+    # « CSV UTF-8 » d'Excel : un BOM au début du fichier
+    path.write_text("match_id,modele,controle_auto,erreurs_chiffres,inventions,omissions,remarques\n"
+                    "EUW1_1,m,ancien,2,,,relu\n", encoding="utf-8-sig", newline="")
+    append_review_rows(path, [{"match_id": "EUW1_1", "modele": "m", "controle_auto": "ok"}])
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        data = list(csv.DictReader(f))
+    assert len(data) == 1
+    assert data[0]["controle_auto"] == "ok"
+    assert data[0]["erreurs_chiffres"] == "2" and data[0]["remarques"] == "relu"
+
+
 def test_chat_sends_the_requested_seed_and_markdown_shows_the_summary_note():
     seen = []
     server = _fake_ollama(seen)

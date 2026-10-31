@@ -708,7 +708,7 @@ def append_review_rows(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     existing: list[dict] = []
     if path.exists():
-        with path.open(encoding="utf-8", newline="") as f:
+        with path.open(encoding="utf-8-sig", newline="") as f:  # -sig : tolère l'en-tête ajouté par Excel
             existing = list(csv.DictReader(f))
     index = {(r["match_id"], r["modele"]): r for r in existing}
     for r in rows:

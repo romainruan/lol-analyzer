@@ -53,6 +53,8 @@ def _patch(game_version: str) -> str:
 
 def build_rows(match: dict, timeline: dict, minutes=DEFAULT_MINUTES) -> list[dict]:
     info = match["info"]
+    if info.get("gameEndedInEarlySurrender"):  # remake : la partie n'a pas vraiment été jouée
+        return []
     blue_win = int(next(t for t in info["teams"] if t["teamId"] == BLUE)["win"])
     frames = timeline["info"]["frames"]
     events = [e for f in frames for e in f.get("events", [])]

@@ -39,3 +39,39 @@ def test_collect_for_puuid_can_skip_the_most_recent_games(tmp_path):
 
     assert collect_for_puuid(Client(), "p1", tmp_path, count=100, start=100) == 0
     assert calls == [("p1", 100, 100)]
+
+
+# ----------------------------------------------------------------------------- interruption
+def test_timeline_interrupted_while_writing_is_downloaded_again(tmp_path, monkeypatch):
+    import json
+    from pathlib import Path
+
+    from src.collect import collect_match
+
+    class Client:
+        def get_match(self, match_id):
+            return {"metadata": {"matchId": match_id}}
+
+        def get_timeline(self, match_id):
+            return {"info": {"frames": []}}
+
+    real_write = Path.write_text
+
+    def interrupted_write(self, data, *args, **kwargs):  # Ctrl+C au milieu de l'écriture de la timeline
+        if "timelines" in self.parts:
+            real_write(self, data[: len(data) // 2], *args, **kwargs)
+            raise KeyboardInterrupt
+        return real_write(self, data, *args, **kwargs)
+
+    with monkeypatch.context() as m:
+        m.setattr(Path, "write_text", interrupted_write)
+        try:
+            collect_match(Client(), "EUW1_1", tmp_path)
+        except KeyboardInterrupt:
+            pass
+
+    # build_dataset lit timelines/*.json : aucun fichier tronqué ne doit y apparaître
+    assert list((tmp_path / "timelines").glob("*.json")) == []
+    assert collect_match(Client(), "EUW1_1", tmp_path) is True
+    timeline = tmp_path / "timelines" / "EUW1_1.json"
+    assert json.loads(timeline.read_text(encoding="utf-8")) == {"info": {"frames": []}}
