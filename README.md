@@ -17,16 +17,22 @@ LLM local (Ollama). Le tout conteneurisé avec Docker.
 
 ## Résultats
 
-**Modèle de probabilité** : environ 3 200 parties de joueurs Master, validation croisée par partie,
-régression logistique sur les écarts d'équipe (AUC avec intervalle de confiance à 95 % par bootstrap).
+**Modèle de probabilité** : environ 3 200 parties de joueurs Master, collectées du 24 septembre au
+31 octobre 2026 (patchs 16.19 à 16.21), régression logistique sur les écarts d'équipe (AUC par minute).
 
 | Minute | 5 | 10 | 15 | 20 | 25 |
 |---|---|---|---|---|---|
-| AUC | 0,67 | 0,77 | 0,84 | 0,87 | 0,89 |
-| Intervalle | 0,65 à 0,69 | 0,75 à 0,78 | 0,82 à 0,85 | 0,86 à 0,88 | 0,87 à 0,90 |
+| Validation croisée par partie | 0,67 | 0,77 | 0,84 | 0,87 | 0,89 |
+| Test dans le temps (20 % les plus récentes) | 0,64 | 0,74 | 0,82 | 0,86 | 0,88 |
+| Patch 16.20 mis de côté | 0,65 | 0,75 | 0,85 | 0,88 | 0,89 |
+| Patch 16.21 mis de côté | 0,68 | 0,77 | 0,83 | 0,87 | 0,89 |
 
-Le gradient boosting et le modèle avec l'écart d'or par lane n'apportent rien de significatif
-de plus : à cette taille d'échantillon, le modèle linéaire suffit.
+Les écarts entre ces trois mesures sont de l'ordre du bruit de mesure : le modèle tient dans le temps
+et d'un patch à l'autre. Il prédit mal le début de partie (AUC 0,65 à 0,68 à 5 minutes) : les sauts de
+probabilité avant la 5e minute sont à interpréter avec prudence. Le gradient boosting et le modèle avec
+l'écart d'or par lane ne font pas mieux de façon significative : un modèle linéaire suffit.
+Réserves : un seul rang (Master), cinq semaines de données et trois patchs (dont un de 43 parties, utilisé
+seulement à l'entraînement), tests par patch limités à deux patchs.
 
 **Fidélité des débriefs** : 12 parties, relues à la main (`docs/review.csv`). Une ligne compte comme
 fautive si au moins une erreur de chiffre, d'invention ou d'omission a été trouvée.
