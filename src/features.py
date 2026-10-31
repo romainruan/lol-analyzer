@@ -118,6 +118,7 @@ def build_rows(match: dict, timeline: dict, minutes=DEFAULT_MINUTES) -> list[dic
             {
                 "match_id": match_id,
                 "patch": _patch(info.get("gameVersion", "0.0")),
+                "game_creation": info.get("gameCreation", 0),  # date de la partie (ms), pour un test dans le temps
                 "minute": m,
                 "gold_diff": diff["gold"],
                 "xp_diff": diff["xp"],

@@ -89,6 +89,27 @@ def evaluate_curve_model(df: pd.DataFrame, n_splits: int = 5) -> pd.DataFrame:
     return out
 
 
+def evaluate_time_split(df: pd.DataFrame, test_fraction: float = 0.2) -> pd.DataFrame:
+    """Test dans le temps : on entraîne sur les parties les plus anciennes et on mesure l'AUC sur
+    les plus récentes, ce qu'une validation croisée ne fait pas (elle mélange les dates)."""
+    starts = df.groupby("match_id")["game_creation"].first().sort_values()
+    n_test = max(1, int(round(len(starts) * test_fraction)))
+    test_ids = set(starts.index[-n_test:])
+    is_test = df["match_id"].isin(test_ids)
+    train, test = df[~is_test], df[is_test]
+    proba = fit_curve_model(train).predict_proba(design_matrix(test))[:, 1]
+    rows = []
+    for m in REPORT_MINUTES:
+        mask = (test["minute"] == m).to_numpy()
+        if mask.sum() >= 30 and test.loc[mask, "blue_win"].nunique() == 2:
+            rows.append({"minute": m, "n_games": int(mask.sum()),
+                         "auc": roc_auc_score(test.loc[mask, "blue_win"], proba[mask])})
+    out = pd.DataFrame(rows)
+    out.attrs.update(n_train=int(train["match_id"].nunique()), n_test=len(test_ids),
+                     log_loss=log_loss(test["blue_win"], proba))
+    return out
+
+
 # ----------------------------------------------------------------------------- analyse
 def find_turning_points(
     minutes: list[int], probs: list[float], k: int = 3, min_delta: float = 0.03
@@ -256,6 +277,15 @@ def cmd_train(args: argparse.Namespace) -> None:
     print("AUC hors échantillon du modèle « toutes minutes » (validation croisée par partie) :")
     print(scores.round(3).to_string(index=False))
     print(f"Log-loss global : {scores.attrs['log_loss']:.3f}")
+    if args.time_split > 0:
+        if "game_creation" not in df.columns:
+            print("\n(Pas de colonne game_creation : reconstruisez le jeu de données avec build_dataset.)")
+        else:
+            ts = evaluate_time_split(df, args.time_split)
+            print(f"\nTest dans le temps : entraîné sur {ts.attrs['n_train']} parties anciennes, "
+                  f"testé sur les {ts.attrs['n_test']} plus récentes")
+            print(ts.round(3).to_string(index=False))
+            print(f"Log-loss : {ts.attrs['log_loss']:.3f}")
     model = fit_curve_model(df)
     out = Path(args.model)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -314,6 +344,9 @@ def main() -> None:
     t = sub.add_parser("train", help="entraîne le modèle toutes minutes")
     t.add_argument("--data", default="data/dataset_all.csv")
     t.add_argument("--model", default="results/curve_model.joblib")
+    t.add_argument("--time-split", type=float, default=0.0, metavar="FRACTION",
+                   help="ex. 0.2 : teste aussi sur les 20 %% de parties les plus récentes, "
+                        "entraînement sur les autres")
     t.set_defaults(func=cmd_train)
 
     a = sub.add_parser("analyze", help="courbe et moments clés de vos parties")

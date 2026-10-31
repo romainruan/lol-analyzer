@@ -168,3 +168,25 @@ def test_select_ids_skip_existing_keeps_only_games_without_a_curve(tmp_path):
     assert select_ids(tmp_path, curves, limit=5, skip_existing=True) == ["EUW1_2", "EUW1_1"]
     # le plafond s'applique après le filtre, pas avant
     assert select_ids(tmp_path, curves, limit=1, skip_existing=True) == ["EUW1_2"]
+
+
+# ----------------------------------------------------------------------------- test dans le temps
+def test_time_split_trains_on_old_games_and_tests_on_the_newest():
+    import numpy as np
+    import pandas as pd
+    from src.train import BASE_FEATURES
+    from src.winprob import REPORT_MINUTES, evaluate_time_split
+
+    rng = np.random.default_rng(0)
+    rows = []
+    for g in range(200):
+        gold = rng.normal(0, 1500)
+        win = int(gold + rng.normal(0, 1500) > 0)
+        for m in REPORT_MINUTES:
+            row = {"match_id": f"EUW1_{g}", "game_creation": 1_000 + g, "minute": m, "blue_win": win}
+            row.update({f: (gold if f == "gold_diff" else 0.0) for f in BASE_FEATURES})
+            rows.append(row)
+    ts = evaluate_time_split(pd.DataFrame(rows), test_fraction=0.25)
+    assert ts.attrs["n_test"] == 50 and ts.attrs["n_train"] == 150
+    assert list(ts["minute"]) == list(REPORT_MINUTES)
+    assert (ts["auc"] > 0.7).all()  # le signal appris sur les anciennes parties vaut sur les récentes
