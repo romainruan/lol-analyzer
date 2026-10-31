@@ -1,0 +1,154 @@
+{
+  "match_id": "EUW1_8015593577",
+  "perspective": {
+    "team": "rouge",
+    "champion": "Qiyana",
+    "role": "MIDDLE",
+    "result": "victoire"
+  },
+  "curve": [
+    {
+      "minute": 2,
+      "win_prob": 0.454
+    },
+    {
+      "minute": 3,
+      "win_prob": 0.537
+    },
+    {
+      "minute": 4,
+      "win_prob": 0.518
+    },
+    {
+      "minute": 5,
+      "win_prob": 0.643
+    },
+    {
+      "minute": 6,
+      "win_prob": 0.55
+    },
+    {
+      "minute": 7,
+      "win_prob": 0.68
+    },
+    {
+      "minute": 8,
+      "win_prob": 0.545
+    },
+    {
+      "minute": 9,
+      "win_prob": 0.469
+    },
+    {
+      "minute": 10,
+      "win_prob": 0.482
+    },
+    {
+      "minute": 11,
+      "win_prob": 0.486
+    },
+    {
+      "minute": 12,
+      "win_prob": 0.55
+    },
+    {
+      "minute": 13,
+      "win_prob": 0.737
+    },
+    {
+      "minute": 14,
+      "win_prob": 0.74
+    },
+    {
+      "minute": 15,
+      "win_prob": 0.918
+    },
+    {
+      "minute": 16,
+      "win_prob": 0.891
+    },
+    {
+      "minute": 17,
+      "win_prob": 0.826
+    },
+    {
+      "minute": 18,
+      "win_prob": 0.949
+    },
+    {
+      "minute": 19,
+      "win_prob": 0.948
+    },
+    {
+      "minute": 20,
+      "win_prob": 0.977
+    },
+    {
+      "minute": 21,
+      "win_prob": 0.976
+    },
+    {
+      "minute": 22,
+      "win_prob": 0.983
+    },
+    {
+      "minute": 23,
+      "win_prob": 0.978
+    },
+    {
+      "minute": 24,
+      "win_prob": 0.989
+    },
+    {
+      "minute": 25,
+      "win_prob": 0.983
+    },
+    {
+      "minute": 26,
+      "win_prob": 0.989
+    },
+    {
+      "minute": 27,
+      "win_prob": 0.989
+    },
+    {
+      "minute": 28,
+      "win_prob": 0.986
+    }
+  ],
+  "turning_points": [
+    {
+      "minute": 8,
+      "win_prob_before": 0.68,
+      "win_prob_after": 0.545,
+      "events": [
+        "LeeSin (ennemis) tue Qiyana (alliés)",
+        "Caitlyn (ennemis) tue Velkoz (alliés)"
+      ]
+    },
+    {
+      "minute": 13,
+      "win_prob_before": 0.55,
+      "win_prob_after": 0.737,
+      "events": [
+        "Malphite (alliés) tue Kayle (ennemis)",
+        "LeeSin (ennemis) tue Graves (alliés)",
+        "Janna (alliés) tue LeeSin (ennemis)",
+        "Qiyana (alliés) tue Ekko (ennemis)"
+      ]
+    },
+    {
+      "minute": 15,
+      "win_prob_before": 0.74,
+      "win_prob_after": 0.918,
+      "events": [
+        "Les alliés prennent le Dragon",
+        "Les ennemis détruisent une tour",
+        "Les alliés détruisent une tour",
+        "Qiyana (alliés) tue LeeSin (ennemis)",
+        "Malphite (alliés) tue Kayle (ennemis)",
+        "Graves (alliés) tue Ekko (ennemis)"
+      ]
+    }
+  ]
+}

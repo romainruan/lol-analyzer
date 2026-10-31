@@ -2,19 +2,20 @@ services:
   app:
     build: .
     env_file: .env
+    environment:
+      # le LLM tourne dans le service « ollama » ci-dessous, joignable par son nom
+      OLLAMA_HOST: http://ollama:11434
     volumes:
       - ./data:/app/data
-    environment:
-      OLLAMA_HOST: http://ollama:11434
+      - ./results:/app/results
     depends_on:
       - ollama
 
-  # LLM local pour les débriefs (étape 5). Pour un GPU NVIDIA, ajoutez
-  # une section `deploy.resources.reservations.devices` (voir la doc Ollama).
+  # LLM local. Pas de « ports » : seul le conteneur app en a besoin, et cela évite un conflit
+  # avec un Ollama déjà lancé sur la machine (port 11434).
+  # GPU NVIDIA : ajouter  -f docker-compose.gpu.yml  à la commande (voir README).
   ollama:
     image: ollama/ollama
-    ports:
-      - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
 

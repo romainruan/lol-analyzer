@@ -1,0 +1,11 @@
+# Réservation du GPU NVIDIA pour Ollama. À utiliser en plus du fichier principal :
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d ollama
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

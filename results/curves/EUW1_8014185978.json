@@ -1,0 +1,126 @@
+{
+  "match_id": "EUW1_8014185978",
+  "perspective": {
+    "team": "bleue",
+    "champion": "Qiyana",
+    "role": "MIDDLE",
+    "result": "défaite"
+  },
+  "curve": [
+    {
+      "minute": 2,
+      "win_prob": 0.479
+    },
+    {
+      "minute": 3,
+      "win_prob": 0.511
+    },
+    {
+      "minute": 4,
+      "win_prob": 0.479
+    },
+    {
+      "minute": 5,
+      "win_prob": 0.373
+    },
+    {
+      "minute": 6,
+      "win_prob": 0.327
+    },
+    {
+      "minute": 7,
+      "win_prob": 0.261
+    },
+    {
+      "minute": 8,
+      "win_prob": 0.265
+    },
+    {
+      "minute": 9,
+      "win_prob": 0.175
+    },
+    {
+      "minute": 10,
+      "win_prob": 0.149
+    },
+    {
+      "minute": 11,
+      "win_prob": 0.156
+    },
+    {
+      "minute": 12,
+      "win_prob": 0.055
+    },
+    {
+      "minute": 13,
+      "win_prob": 0.045
+    },
+    {
+      "minute": 14,
+      "win_prob": 0.022
+    },
+    {
+      "minute": 15,
+      "win_prob": 0.018
+    },
+    {
+      "minute": 16,
+      "win_prob": 0.009
+    },
+    {
+      "minute": 17,
+      "win_prob": 0.01
+    },
+    {
+      "minute": 18,
+      "win_prob": 0.007
+    },
+    {
+      "minute": 19,
+      "win_prob": 0.008
+    },
+    {
+      "minute": 20,
+      "win_prob": 0.003
+    },
+    {
+      "minute": 21,
+      "win_prob": 0.002
+    },
+    {
+      "minute": 22,
+      "win_prob": 0.001
+    }
+  ],
+  "turning_points": [
+    {
+      "minute": 5,
+      "win_prob_before": 0.479,
+      "win_prob_after": 0.373,
+      "events": [
+        "Draven (alliés) tue MissFortune (ennemis)",
+        "Nami (ennemis) tue Draven (alliés)",
+        "Hecarim (ennemis) tue Anivia (alliés)"
+      ]
+    },
+    {
+      "minute": 9,
+      "win_prob_before": 0.265,
+      "win_prob_after": 0.175,
+      "events": [
+        "Hecarim (ennemis) tue Draven (alliés)",
+        "Hecarim (ennemis) tue Galio (alliés)"
+      ]
+    },
+    {
+      "minute": 12,
+      "win_prob_before": 0.156,
+      "win_prob_after": 0.055,
+      "events": [
+        "Les ennemis prennent le Dragon",
+        "Hecarim (ennemis) tue Qiyana (alliés)",
+        "Hecarim (ennemis) tue Chogath (alliés)"
+      ]
+    }
+  ]
+}

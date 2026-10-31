@@ -1,0 +1,111 @@
+{
+  "match_id": "EUW1_8016459544",
+  "perspective": {
+    "team": "rouge",
+    "champion": "Ahri",
+    "role": "MIDDLE",
+    "result": "défaite"
+  },
+  "curve": [
+    {
+      "minute": 2,
+      "win_prob": 0.408
+    },
+    {
+      "minute": 3,
+      "win_prob": 0.254
+    },
+    {
+      "minute": 4,
+      "win_prob": 0.212
+    },
+    {
+      "minute": 5,
+      "win_prob": 0.216
+    },
+    {
+      "minute": 6,
+      "win_prob": 0.165
+    },
+    {
+      "minute": 7,
+      "win_prob": 0.17
+    },
+    {
+      "minute": 8,
+      "win_prob": 0.173
+    },
+    {
+      "minute": 9,
+      "win_prob": 0.187
+    },
+    {
+      "minute": 10,
+      "win_prob": 0.152
+    },
+    {
+      "minute": 11,
+      "win_prob": 0.194
+    },
+    {
+      "minute": 12,
+      "win_prob": 0.101
+    },
+    {
+      "minute": 13,
+      "win_prob": 0.066
+    },
+    {
+      "minute": 14,
+      "win_prob": 0.032
+    },
+    {
+      "minute": 15,
+      "win_prob": 0.019
+    },
+    {
+      "minute": 16,
+      "win_prob": 0.006
+    },
+    {
+      "minute": 17,
+      "win_prob": 0.004
+    },
+    {
+      "minute": 18,
+      "win_prob": 0.001
+    }
+  ],
+  "turning_points": [
+    {
+      "minute": 3,
+      "win_prob_before": 0.408,
+      "win_prob_after": 0.254,
+      "events": [
+        "Zeri (alliés) tue Jinx (ennemis)",
+        "Kindred (ennemis) tue Zeri (alliés)",
+        "Kindred (ennemis) tue Chogath (alliés)",
+        "Kindred (ennemis) tue Ahri (alliés)",
+        "Kindred (ennemis) tue Yuumi (alliés)"
+      ]
+    },
+    {
+      "minute": 6,
+      "win_prob_before": 0.216,
+      "win_prob_after": 0.165,
+      "events": [
+        "Viktor (ennemis) tue Ahri (alliés)"
+      ]
+    },
+    {
+      "minute": 12,
+      "win_prob_before": 0.194,
+      "win_prob_after": 0.101,
+      "events": [
+        "Les ennemis détruisent une tour",
+        "Viktor (ennemis) tue Ahri (alliés)",
+        "Kindred (ennemis) tue Chogath (alliés)"
+      ]
+    }
+  ]
+}

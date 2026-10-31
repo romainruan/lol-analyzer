@@ -162,10 +162,27 @@ français, d'où la reprise automatique.
 
 ### Avec Docker
 
+Deux services : `app` (le code) et `ollama` (le LLM local). Les dossiers `data/` et
+`results/` sont montés depuis votre machine, donc rien n'est perdu quand le conteneur s'arrête.
+
 ```bash
-docker compose build
-docker compose run --rm app python -m src.collect --riot-id "VotrePseudo#EUW"
+docker compose build                                   # construit l'image de l'application
+docker compose run --rm app python -m pytest -q        # les tests, dans le conteneur
+docker compose up -d ollama                            # démarre le LLM local
+docker compose exec ollama ollama pull qwen2.5:7b      # télécharge le modèle (une fois, ~4,7 Go)
+docker compose run --rm app python -m src.debrief --limit 3
+docker compose down                                    # arrête les services
 ```
+
+Avec un GPU NVIDIA (Docker Desktop + pilote NVIDIA), démarrez Ollama ainsi, puis vérifiez avec
+`docker compose exec ollama ollama ps` que la colonne PROCESSOR indique `100% GPU` :
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d ollama
+```
+
+Le conteneur `app` joint Ollama par son nom (`OLLAMA_HOST=http://ollama:11434`) : aucun port
+n'est publié, ce qui évite tout conflit avec un Ollama déjà lancé sur votre machine.
 
 ## Points de rigueur
 
