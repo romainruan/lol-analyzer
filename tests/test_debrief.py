@@ -595,9 +595,104 @@ def test_check_claims_flags_one_minute_given_two_values():
     brief = v5_brief()
     text = ("Elle a diminué à 32 % à la 3e minute, 30 % à la 7e minute, 22 % à la 7e minute, "
             "20 % à la 9e minute.")
-    assert check_claims(text, brief) == ["la 7e minute est citée avec deux valeurs : 30 % et 22 %"]
-    ok = "À la 9e minute, elle passe de 54 % à 44 %. Son minimum de 45 % est à la 2e minute."
+    assert "la 7e minute est citée avec deux valeurs : 30 % et 22 %" in check_claims(text, brief)
+    ok = "À la 8e minute, elle passe de 68 % à 55 %. Son minimum de 45 % est à la 2e minute."
     assert check_claims(ok, brief) == []
+
+
+def test_check_claims_flags_the_value_before_a_jump_given_at_the_minute_of_the_jump():
+    # erreur réelle v5.2 (EUW1_8014113615) : « passant à 86 % à la 30e », 86 % étant la valeur d'avant le saut
+    brief = v5_brief()
+    assert check_claims("Elle passe à 68 % à la 8e minute.", brief) == [
+        "68 % associé à la 8e minute : valeur que les faits ne placent pas là"]
+    assert check_claims("Elle passe à 55 % à la 8e minute.", brief) == []
+    # la valeur d'avant le saut est bien celle de la minute précédente
+    assert check_claims("Elle est à 68 % à la 7e minute.", brief) == []
+
+
+def test_check_claims_flags_a_value_the_facts_never_give_at_this_minute():
+    assert check_claims("Elle est à 92 % à la 8e minute.", v5_brief()) == [
+        "92 % associé à la 8e minute : valeur que les faits ne placent pas là"]
+
+
+def test_check_claims_flags_a_transition_given_at_the_wrong_minute():
+    assert check_claims("À la 15e minute, elle passe de 68 % à 55 %.", v5_brief()) == [
+        "transition de 68 % à 55 % citée à la 15e minute : les faits la placent à la 8e"]
+    assert check_claims("Elle passe de 68 % à 55 % à la 8e minute.", v5_brief()) == []
+
+
+@pytest.mark.parametrize("text", [
+    "Elle reste à 97 % à la 29e minute.",  # relus : EUW1_8013283171, EUW1_8013350738
+    "Elle est restée à 97 % à la 29e minute.",  # relus : EUW1_8010363427, EUW1_8011863149
+    "Elle se stabilise à 97 % à la 29e minute.",  # relus : EUW1_8009250380, EUW1_8010292186
+    "Elle s'est stabilisée à 97 %.",
+    "Elle demeure à 97 %.",
+])
+def test_check_claims_blocks_what_the_review_called_unverifiable(text):
+    assert any("affirmation non vérifiable" in issue for issue in check_claims(text, v5_brief()))
+
+
+def test_check_claims_blocks_a_range_stretched_over_a_period():
+    # erreur réelle v5.2 (EUW1_8012183126) : « se situe entre 11 % et 52 % jusqu'à la 22e minute »
+    issues = check_claims("Elle se situe entre 45 % et 99 % jusqu'à la 22e minute.", v5_brief())
+    assert any("jusqu'à la 22e" in issue for issue in issues)
+
+
+def test_summary_may_only_cite_numbers_the_model_was_given():
+    brief = {**v5_brief(), "moments_cles": ["8e minute : la probabilité de victoire de l'équipe passe de 68 % à 55 %. "
+                                            "Événements : Les alliés prennent le Dragon."],
+             "points_forts": ["CS par minute : 73 (médiane : 61), mieux que 83 % des mid Master : fort."]}
+    assert "73" not in build_summary_messages(brief)[1]["content"]
+    assert check_summary("La probabilité atteint 83 %.", brief)[0].startswith("nombres absents")
+    assert check_text("Le CS est à 73.", brief, require_moments=False) == []  # visible pour un texte complet
+
+
+def test_recheck_replays_the_control_on_saved_debriefs_and_compares_with_the_review(tmp_path):
+    from src.debrief import recheck
+
+    brief = v5_brief()
+    good = render_markdown("EUW1_1", brief, render_template({**brief, "moments_cles": []},
+                           "Son maximum de 99 % est à la 27e minute."), [], "m (hybride v5.2)")
+    wrong = render_markdown("EUW1_2", brief, render_template({**brief, "moments_cles": []},
+                            "Elle atteint son pic à 92 %."), [], "m (hybride v5.2)")
+    fallback = render_markdown("EUW1_3", brief, "**Résumé**\nCode.\n\n**Moments clés**\n", [], "m (hybride v5.2)",
+                               note="Résumé du modèle refusé après 3 tentatives : résumé de repli écrit par le code.")
+    (tmp_path / "EUW1_1.md").write_text(good, encoding="utf-8")
+    (tmp_path / "EUW1_2.md").write_text(wrong, encoding="utf-8")
+    (tmp_path / "EUW1_3.md").write_text(fallback, encoding="utf-8")
+    (tmp_path / "EUW1_1_gabarit.md").write_text(good, encoding="utf-8")  # pas un résumé du modèle
+    review = tmp_path / "review.csv"
+    append_review_rows(review, [{"match_id": "EUW1_1", "modele": "m (hybride v5.2)", "controle_auto": "ok",
+                                 "erreurs_chiffres": "0", "inventions": "0", "omissions": "0"},
+                                {"match_id": "EUW1_2", "modele": "m (hybride v5.2)", "controle_auto": "ok",
+                                 "erreurs_chiffres": "1", "inventions": "0", "omissions": "0"}])
+    table = recheck(tmp_path, review).set_index("match_id")
+    assert list(table.index) == ["EUW1_1", "EUW1_2"]  # ni le gabarit ni le repli : ils viennent du code
+    assert table.loc["EUW1_1", "problemes"] == ""
+    assert table.loc["EUW1_1", "erreurs_relues"] == 0
+    assert "maximum annoncé à 92 %" in table.loc["EUW1_2", "problemes"]
+    assert table.loc["EUW1_2", "erreurs_relues"] == 1
+
+
+def test_moment_sentence_gives_the_gaps_and_the_share_of_each_family():
+    analysis = {**ANALYSIS, "turning_points": [{
+        **ANALYSIS["turning_points"][0], "win_prob_before": 0.54, "win_prob_after": 0.44,
+        "ecarts": {"or": -1200, "kills": -2}, "contributions": {"ressources": -7.5, "combats": 0.0, "objectifs": -2.5},
+    }]}
+    facts = build_facts(analysis, _match(), _timeline(), "p3", bench_frame())
+    sentence = build_brief(facts)["moments_cles"][0]
+    assert "Écarts sur la minute : or -1200, kills -2." in sentence
+    assert "Part du saut : ressources -7,5 points, objectifs -2,5 points." in sentence
+    assert check_text(sentence, build_brief(facts), require_moments=False) == []
+
+
+def test_moment_sentence_warns_about_the_first_minutes_only():
+    def moment_at(minute):
+        analysis = {**ANALYSIS, "turning_points": [{**ANALYSIS["turning_points"][0], "minute": minute}]}
+        return build_brief(build_facts(analysis, _match(), _timeline(), "p3", bench_frame()))["moments_cles"][0]
+
+    assert "estimation peu fiable" in moment_at(4)
+    assert "estimation peu fiable" not in moment_at(5)
 
 
 # ----------------------------------------------------------------------------- --only-unreviewed

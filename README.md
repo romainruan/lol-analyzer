@@ -227,6 +227,21 @@ affirmations invérifiables (« jusqu'à la fin », « plus brusquement »). Mes
 contrôles écrits à partir des erreurs restantes : comme ils sont réglés sur les mêmes 12 parties,
 leur score est optimiste et doit être confirmé sur des parties nouvelles.
 
+**Version 5.3 (non mesurée sur des parties nouvelles).** Écrite à partir des erreurs et des remarques de la relecture
+de la v5.2 : une valeur citée à une minute doit être celle que les faits y placent (« passant à 86 % à la 30e » alors
+que 86 % est la valeur d'avant le saut), une transition doit être citée à la minute du saut, et le résumé ne peut ni
+citer un nombre qu'il n'a jamais vu, ni affirmer ce qui se passe entre deux minutes (« reste à », « se stabilise »,
+« jusqu'à la 22e »). Rejoué sur les résumés v5 et v5.1 relus à la main, ce contrôle détecte les 5 erreurs relevées, mais
+refuse aussi 7 résumés sur 18 jugés sans erreur, surtout à cause de ces formulations : il y aura sans doute plus de
+reprises, voire de replis sur le texte du code. Pour rejouer le contrôle sur des débriefs déjà écrits, sans LLM :
+
+```bash
+python -m src.debrief --recheck results/debriefs --review docs/review.csv
+```
+
+Chaque moment clé indique aussi les écarts sur la minute, la part de chaque famille si le modèle le permet (voir
+section 5), et signale les premières minutes, où l'estimation est peu fiable. Le résumé du modèle n'utilise rien de cela.
+
 **Contrôle automatique** : nombres absents des faits, pourcentages qui n'existent pas
 comme pourcentages, transitions « de A % à B % » qui mélangent deux sauts, moments clés
 omis, champions cités à la mauvaise minute, minutes écrites en lettres, liste de mots anglais connus,
@@ -235,7 +250,7 @@ sans données, résumé de plus de 3 phrases. Il ne vérifie ni le sens des phra
 tué qui : relisez chaque débrief.
 
 **Mesure de fidélité.** Chaque exécution met à jour `results/debriefs/review.csv` (copie des mesures : `docs/review.csv` ; une
-ligne par débrief et par mode, le mode hybride étant étiqueté `hybride v5.2`). Remplissez à
+ligne par débrief et par mode, le mode hybride étant étiqueté `hybride v5.3`). Remplissez à
 la main `erreurs_chiffres`, `inventions` et `omissions` : vos annotations sont conservées
 quand vous relancez. Le nombre d'erreurs par débrief permet de comparer les modes et les
 modèles (`--model llama3.1:8b`). Fermez le fichier dans Excel avant de relancer.
