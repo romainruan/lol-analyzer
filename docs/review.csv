@@ -59,3 +59,42 @@ EUW1_8017288583,qwen2.5:7b (hybride v5.1),repli gabarit : formulation causale ou
 EUW1_8017315091,qwen2.5:7b (hybride v5.1),ok,0,0,0,
 EUW1_8017352061,qwen2.5:7b (hybride v5.1),ok,0,0,0,
 EUW1_8017411707,qwen2.5:7b (hybride v5.1),ok (tentative 2/3),0,0,0,
+EUW1_8009250380,qwen2.5:7b (hybride v5.2),ok,0,0,0,« se stabilise » non vérifiable (15e = dernière minute)
+EUW1_8009371579,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8009543095,qwen2.5:7b (hybride v5.2),repli gabarit : nombres absents des faits : 19 ; maximum situé à la 8e minute alors qu'il est à la 19e ; minimum annoncé à 100 % alors qu'il est à 44 %,0,0,0,repli : texte écrit par le code
+EUW1_8009596131,qwen2.5:7b (hybride v5.2),repli gabarit : nombres absents des faits : 8,0,0,0,repli : texte écrit par le code
+EUW1_8009630348,qwen2.5:7b (hybride v5.2),ok,0,0,0,« restant à ce niveau » : minimum et fin à la même minute
+EUW1_8009749295,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8009792501,qwen2.5:7b (hybride v5.2),ok (tentative 3/3),0,0,0,accepté à la 3e tentative
+EUW1_8010241351,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8010275495,qwen2.5:7b (hybride v5.2),ok (tentative 2/3),0,0,0,formulation redondante (maximum = fin)
+EUW1_8010292186,qwen2.5:7b (hybride v5.2),ok (tentative 3/3),0,0,0,« s'est stabilisé » non vérifiable ; accepté à la 3e tentative
+EUW1_8010321088,qwen2.5:7b (hybride v5.2),ok (tentative 3/3),0,0,0,accepté à la 3e tentative
+EUW1_8010414512,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8010363427,qwen2.5:7b (hybride v5.2),ok,0,0,0,« restée à 1 % » entre la 16e et la 24e non vérifiable
+EUW1_8010818242,qwen2.5:7b (hybride v5.2),ok (tentative 2/3),0,0,0,
+EUW1_8011438975,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8011473033,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8011523175,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8011631561,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8011694279,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8011751320,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8011815018,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8011863149,qwen2.5:7b (hybride v5.2),ok,0,0,0,« restée à 98 % » non vérifiable
+EUW1_8012183126,qwen2.5:7b (hybride v5.2),ok (tentative 3/3),1,1,0,« se situe entre 11 % et 52 % jusqu'à la 22e minute » inventé : 52 % date d'avant la 12e minute ; accepté à la 3e tentative
+EUW1_8012201201,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8012223866,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8012229419,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8012616107,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8012689704,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8013231130,qwen2.5:7b (hybride v5.2),repli gabarit : maximum situé à la 16e minute alors qu'il est à la 25e,0,0,0,repli : texte écrit par le code
+EUW1_8013252276,qwen2.5:7b (hybride v5.2),ok (tentative 2/3),0,0,0,
+EUW1_8013283171,qwen2.5:7b (hybride v5.2),ok,0,0,0,« reste à 95 % » non vérifiable
+EUW1_8013314764,qwen2.5:7b (hybride v5.2),ok (tentative 2/3),0,0,0,
+EUW1_8013350738,qwen2.5:7b (hybride v5.2),ok,0,0,0,« reste à 82 % » non vérifiable
+EUW1_8013488853,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8013535194,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8014085690,qwen2.5:7b (hybride v5.2),ok,0,0,0,
+EUW1_8014113615,qwen2.5:7b (hybride v5.2),ok,1,0,0,"« passant à 86 % à la 30e » et « chuter à 51 % à la 35e » : ce sont les valeurs d'avant le saut (86 % → 65 %, 51 % → 36 %)"
+EUW1_8014131136,qwen2.5:7b (hybride v5.2),repli gabarit : minimum situé à la 25e minute alors qu'il est à la 2e,0,0,0,repli : texte écrit par le code
+EUW1_8014159957,qwen2.5:7b (hybride v5.2),ok,0,0,0,

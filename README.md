@@ -34,14 +34,13 @@ fautive si au moins une erreur de chiffre, d'invention ou d'omission a été tro
 | Mode (Qwen2.5 7B) | Débriefs avec au moins une erreur |
 |---|---|
 | Gabarit, sans LLM (référence) | 0 sur 12 |
-| Le modèle écrit tout | 6 sur 12 détectés automatiquement (causalité inventée, sections sans données) ; non relu à la main |
-| Hybride v4 (résumé écrit par le modèle) | 8 sur 12 |
-| Hybride v5 (min, max et valeur finale fournis, contrôle des affirmations) | 3 sur 12 |
-| Hybride v5.1 | 2 sur 12 |
+| Le modèle écrit tout | 6 sur 12 détectés automatiquement ; non relu à la main |
+| Hybride v4 (12 parties) | 8 sur 12 |
+| Hybride v5 (12 parties) | 3 sur 12 |
+| Hybride v5.1 (12 parties) | 2 sur 12 |
+| **Hybride v5.2 (39 parties jamais relues)** | **2 sur 39 (5 %, intervalle à 95 % : 1 à 17 %)** |
 
-Réserves : 12 parties et un seul relecteur ; les contrôles de la v5.1 et de la v5.2 ont été écrits
-à partir des erreurs de ces mêmes 12 parties, donc leurs scores sont optimistes. La v5.2 n'a pas
-encore été mesurée sur des parties nouvelles.
+Réserves : v4 à v5.1 : mesurés sur les mêmes 12 parties, contrôles ajustés au fil des erreurs. v5.2 : mesurée sur 39 parties nouvelles, contrôles figés avant la mesure ; 4 résumés ont été remplacés par le texte du code après 3 échecs du modèle. Un seul relecteur.
 
 **Pistes** : mesurer la v5.2 sur de nouvelles parties, interprétation du modèle (SHAP), interface Streamlit.
 
