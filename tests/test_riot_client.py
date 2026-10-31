@@ -1,4 +1,5 @@
 import pytest
+import requests
 
 from src.riot_client import NotFound, RiotAPIError, RiotClient
 
@@ -73,6 +74,39 @@ def test_403_mentions_expired_key():
     client, _ = make_client([FakeResponse(403)])
     with pytest.raises(RiotAPIError, match="expirée"):
         client.get_match("EUW1_1")
+
+
+class FlakySession:
+    """Lève les exceptions de la liste, renvoie les réponses."""
+
+    def __init__(self, outcomes):
+        self.outcomes = list(outcomes)
+        self.calls = 0
+
+    def get(self, url, headers=None, params=None, timeout=None):
+        self.calls += 1
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+@pytest.mark.parametrize("error", [requests.ConnectionError("coupure"), requests.Timeout("lent")])
+def test_network_error_is_retried(monkeypatch, error):
+    monkeypatch.setattr("src.riot_client.time.sleep", lambda s: None)
+    session = FlakySession([error, FakeResponse(200, {"metadata": {}})])
+    client = RiotClient(api_key="RGAPI-test", min_interval=0, session=session)
+    assert client.get_match("EUW1_1") == {"metadata": {}}
+    assert session.calls == 2
+
+
+def test_network_error_gives_up_after_max_retries(monkeypatch):
+    monkeypatch.setattr("src.riot_client.time.sleep", lambda s: None)
+    session = FlakySession([requests.ConnectionError("coupure")] * 3)
+    client = RiotClient(api_key="RGAPI-test", min_interval=0, max_retries=3, session=session)
+    with pytest.raises(RiotAPIError):
+        client.get_match("EUW1_1")
+    assert session.calls == 3
 
 
 def test_missing_key_raises(monkeypatch):

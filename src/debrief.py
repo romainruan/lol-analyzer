@@ -1,4 +1,4 @@
-"""Débrief d'une partie rédigé par un LLM local (Ollama), version 4.
+"""Débrief d'une partie rédigé par un LLM local (Ollama), version 5.2.
 
 Principe : le code analyse, le modèle rédige.
   1. `build_facts` calcule les chiffres de la partie (stats, position parmi les mid
@@ -692,7 +692,8 @@ def render_markdown(match_id: str, brief: dict, text: str, issues: list[str], mo
     data = json.dumps(brief, ensure_ascii=False, indent=1)
     return (f"# Débrief {match_id}\n\n{text}\n\n---\n"
             f"*Modèle : {model}. Vérification automatique : {check}.{' ' + note if note else ''}*\n\n"
-            f"Faits fournis au modèle :\n\n```json\n{data}\n```\n")
+            f"Faits calculés par le code (en mode hybride, le modèle n'en voit qu'une partie) :"
+            f"\n\n```json\n{data}\n```\n")
 
 
 REVIEW_COLUMNS = ["match_id", "modele", "controle_auto", "erreurs_chiffres", "inventions",
@@ -708,7 +709,7 @@ def append_review_rows(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     existing: list[dict] = []
     if path.exists():
-        with path.open(encoding="utf-8", newline="") as f:
+        with path.open(encoding="utf-8-sig", newline="") as f:  # -sig : tolère l'en-tête ajouté par Excel
             existing = list(csv.DictReader(f))
     index = {(r["match_id"], r["modele"]): r for r in existing}
     for r in rows:

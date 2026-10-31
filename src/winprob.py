@@ -58,6 +58,11 @@ def design_matrix(df: pd.DataFrame) -> pd.DataFrame:
     return X
 
 
+def load_dataset(path: str | Path) -> pd.DataFrame:
+    # patch en texte : relu comme un nombre, 16.1 et 16.10 seraient confondus
+    return pd.read_csv(path, dtype={"patch": str})
+
+
 def make_curve_model() -> Pipeline:
     return Pipeline([("scale", StandardScaler()), ("clf", LogisticRegression(max_iter=2000))])
 
@@ -121,7 +126,7 @@ def evaluate_patch_holdout(df: pd.DataFrame, min_games: int = 300) -> pd.DataFra
     for patch in games[games >= min_games].index:
         is_test = df["patch"] == patch
         r = _split_auc(df[~is_test], df[is_test])
-        r.insert(0, "patch", f"{float(patch):.2f}")
+        r.insert(0, "patch", patch)
         r["n_train"] = r.attrs["n_train"]
         parts.append(r)
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
@@ -172,6 +177,8 @@ def describe_events(events: list[dict], participants: list[dict], my_team: int |
     for e in events:
         t = e.get("type")
         if t == "ELITE_MONSTER_KILL":
+            if e.get("killerTeamId") not in (BLUE, RED):  # monstre tué sans équipe en jeu
+                continue
             name = MONSTERS.get(e.get("monsterType"), str(e.get("monsterType")))
             objectives.append(f"Les {side(e.get('killerTeamId', 0))} prennent {name}")
         elif t == "BUILDING_KILL":
@@ -287,7 +294,7 @@ def _load(raw_dir: Path, match_id: str) -> tuple[dict, dict]:
 
 
 def cmd_train(args: argparse.Namespace) -> None:
-    df = pd.read_csv(args.data).dropna(subset=BASE_FEATURES)
+    df = load_dataset(args.data).dropna(subset=BASE_FEATURES)
     if df["match_id"].nunique() < 50:
         raise SystemExit("Moins de 50 parties : collectez davantage avant d'entraîner.")
     scores = evaluate_curve_model(df)

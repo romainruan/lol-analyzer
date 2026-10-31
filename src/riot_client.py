@@ -22,6 +22,10 @@ class NotFound(RiotAPIError):
     """Ressource introuvable (HTTP 404)."""
 
 
+class AuthError(RiotAPIError):
+    """Clé invalide ou expirée (HTTP 401/403) : inutile de continuer la collecte."""
+
+
 class RiotClient:
     def __init__(
         self,
@@ -55,7 +59,11 @@ class RiotClient:
         headers = {"X-Riot-Token": self.api_key}
         for attempt in range(self.max_retries):
             self._throttle()
-            r = self.session.get(url, headers=headers, params=params, timeout=30)
+            try:
+                r = self.session.get(url, headers=headers, params=params, timeout=30)
+            except (requests.ConnectionError, requests.Timeout):
+                time.sleep(2**attempt)
+                continue
             if r.status_code == 200:
                 return r.json()
             if r.status_code == 429:
@@ -64,7 +72,7 @@ class RiotClient:
             if r.status_code == 404:
                 raise NotFound(url)
             if r.status_code in (401, 403):
-                raise RiotAPIError(
+                raise AuthError(
                     f"{r.status_code} : clé invalide ou expirée (la clé de dev dure 24 h)."
                 )
             if r.status_code >= 500:

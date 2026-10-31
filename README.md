@@ -12,7 +12,7 @@ LLM local (Ollama). Le tout conteneurisé avec Docker.
 « moments clés » du débrief, chacun associé à l'événement de la minute. Un saut n'est pas une cause.*
 
 **Démarrage rapide** (Docker, voir [Avec Docker](#avec-docker)) :
-`docker compose build && docker compose run --rm app python -m pytest -q`
+`docker compose build && docker compose run --rm --no-deps app python -m pytest -q`
 
 > Projet personnel. lol-analyzer isn't endorsed by Riot Games and doesn't reflect the views or opinions
 > of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot
@@ -195,7 +195,7 @@ leur score est optimiste et doit être confirmé sur des parties nouvelles.
 
 **Contrôle automatique** : nombres absents des faits, pourcentages qui n'existent pas
 comme pourcentages, transitions « de A % à B % » qui mélangent deux sauts, moments clés
-omis, champions cités à la mauvaise minute, minutes écrites en lettres, mots anglais,
+omis, champions cités à la mauvaise minute, minutes écrites en lettres, liste de mots anglais connus,
 caractères chinois, formulations causales (« grâce à », « suite à »...), sections écrites
 sans données, résumé de plus de 3 phrases. Il ne vérifie ni le sens des phrases, ni qui a
 tué qui : relisez chaque débrief.
@@ -213,7 +213,7 @@ Deux services : `app` (le code) et `ollama` (le LLM local). Les dossiers `data/`
 
 ```bash
 docker compose build                                   # construit l'image de l'application
-docker compose run --rm app python -m pytest -q        # les tests, dans le conteneur
+docker compose run --rm --no-deps app python -m pytest -q  # les tests, sans démarrer Ollama
 docker compose up -d ollama                            # démarre le LLM local
 docker compose exec ollama ollama pull qwen2.5:7b      # télécharge le modèle (une fois, ~4,7 Go)
 docker compose run --rm app python -m src.debrief --limit 3
