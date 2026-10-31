@@ -7,19 +7,43 @@ LLM local (Ollama). Le tout conteneurisé avec Docker.
 > Projet personnel, non affilié à Riot Games. Ne publiez ni votre clé API ni de
 > données personnelles de joueurs.
 
-## État d'avancement
+## Ce que fait le projet
 
-- [x] Client API avec rate limiting (`src/riot_client.py`)
-- [x] Collecte des parties et timelines (`src/collect.py`)
-- [x] Features à 5/10/15/20/25 min, sans fuite de données (`src/features.py`)
-- [x] Construction du jeu de données (`src/build_dataset.py`)
-- [x] Features par lane, dont mid contre mid (`src/features.py`)
-- [x] Entraînement et évaluation par minute, validation croisée par partie (`src/train.py`)
-- [x] Repères du rôle mid et comparaison avec vos parties (`src/benchmarks.py`)
-- [x] Courbe de probabilité de victoire par partie et moments clés (`src/winprob.py`)
-- [ ] Interprétation (SHAP)
-- [x] Débrief par LLM local : résumé contrôlé, reprise automatique et repli (`src/debrief.py`)
-- [ ] Interface Streamlit
+1. **Collecte** de parties classées via l'API Riot (vos parties et un échantillon de joueurs Master), avec limitation de débit et reprise des téléchargements.
+2. **Modèle de probabilité de victoire** (Scikit-learn) : écarts d'or, d'XP, de CS, d'objectifs entre les deux équipes, minute par minute, sans fuite de données.
+3. **Courbe et moments clés** d'une partie : les plus gros sauts de probabilité, associés aux événements de la minute.
+4. **Débrief écrit par un LLM local** (Ollama) : le code calcule tout, le modèle ne rédige que le résumé, et chaque texte est contrôlé automatiquement.
+5. Le tout dans **Docker** (application + Ollama) avec **CI GitHub** (tests et construction de l'image).
+
+## Résultats
+
+**Modèle de probabilité** : environ 850 parties de joueurs Master, validation croisée par partie,
+régression logistique sur les écarts d'équipe (AUC avec intervalle de confiance à 95 % par bootstrap).
+
+| Minute | 5 | 10 | 15 | 20 | 25 |
+|---|---|---|---|---|---|
+| AUC | 0,65 | 0,75 | 0,85 | 0,88 | 0,89 |
+| Intervalle | 0,62 à 0,69 | 0,72 à 0,78 | 0,82 à 0,87 | 0,86 à 0,91 | 0,86 à 0,91 |
+
+Le gradient boosting et le modèle avec l'écart d'or par lane n'apportent rien de significatif
+de plus : à cette taille d'échantillon, le modèle linéaire suffit.
+
+**Fidélité des débriefs** : 12 parties, relues à la main (`docs/review.csv`). Une ligne compte comme
+fautive si au moins une erreur de chiffre, d'invention ou d'omission a été trouvée.
+
+| Mode (Qwen2.5 7B) | Débriefs avec au moins une erreur |
+|---|---|
+| Gabarit, sans LLM (référence) | 0 sur 12 |
+| Le modèle écrit tout | 6 sur 12 détectés automatiquement (causalité inventée, sections sans données) ; non relu à la main |
+| Hybride v4 (résumé écrit par le modèle) | 8 sur 12 |
+| Hybride v5 (min, max et valeur finale fournis, contrôle des affirmations) | 3 sur 12 |
+| Hybride v5.1 | 2 sur 12 |
+
+Réserves : 12 parties et un seul relecteur ; les contrôles de la v5.1 et de la v5.2 ont été écrits
+à partir des erreurs de ces mêmes 12 parties, donc leurs scores sont optimistes. La v5.2 n'a pas
+encore été mesurée sur des parties nouvelles.
+
+**Pistes** : mesurer la v5.2 sur de nouvelles parties, interprétation du modèle (SHAP), interface Streamlit.
 
 ## Démarrage
 
@@ -127,18 +151,17 @@ d'échec il reçoit la liste de ses erreurs et un autre tirage (graine différen
 3 tentatives (`--attempts`). Si aucune ne passe, le résumé écrit par le code le remplace
 et la fiche de relecture le signale.
 
-**Version 5 (maximum, minimum, valeur finale).** La relecture manuelle de 12 parties avait
-montré que 8 résumés hybrides sur 11 (version 4) contenaient une erreur invisible au contrôle
-automatique : le modèle ne connaissait ni la minute du maximum et du minimum, ni la valeur
-finale, et les devinait (« pic à 92 % » alors que le maximum était 99 %). La phrase de courbe
-indique maintenant le maximum, le minimum et la valeur finale avec leur minute, et un contrôle
-compare chaque « maximum », « pic », « minimum », « le plus bas », « fini à » aux vraies
-valeurs, refuse un 0 % ou un 99 % placé à la mauvaise minute, et refuse les affirmations
-invérifiables (« jusqu'à la fin », « plus brusquement »). Mesure « avant » : voir
-`results/debriefs/review.csv` (lignes `hybride v4`) ; première mesure « après » : lignes `hybride v5` (3 résumés sur 12 avec erreur, contre 8 sur 11).
-Les versions 5.1 et 5.2 ajoutent des contrôles écrits à partir de ces erreurs (« son plus bas
-niveau », « (répétition) », « s'est maintenue », une même minute citée avec deux valeurs) : comme elles sont réglées sur les mêmes 12 parties, son
-score est optimiste ; il faut la mesurer sur des parties nouvelles.
+**Version 5 (maximum, minimum, valeur finale).** La relecture manuelle avait montré que 8
+résumés hybrides sur 12 (version 4) contenaient une erreur invisible au contrôle automatique :
+le modèle ne connaissait ni la minute du maximum et du minimum, ni la valeur finale, et les
+devinait (« pic à 92 % » alors que le maximum était 99 %). La phrase de courbe indique donc
+maintenant le maximum, le minimum et la valeur finale avec leur minute, et un contrôle compare
+chaque « maximum », « pic », « minimum », « le plus bas », « fini à » aux vraies valeurs, refuse un
+0 % ou un 99 % placé à la mauvaise minute, une même minute citée avec deux valeurs, et les
+affirmations invérifiables (« jusqu'à la fin », « plus brusquement »). Mesures : voir
+`docs/review.csv` (lignes `hybride v4`, `v5`, `v5.1`). Les versions 5.1 et 5.2 ajoutent des
+contrôles écrits à partir des erreurs restantes : comme ils sont réglés sur les mêmes 12 parties,
+leur score est optimiste et doit être confirmé sur des parties nouvelles.
 
 **Contrôle automatique** : nombres absents des faits, pourcentages qui n'existent pas
 comme pourcentages, transitions « de A % à B % » qui mélangent deux sauts, moments clés
@@ -147,18 +170,11 @@ caractères chinois, formulations causales (« grâce à », « suite à »...),
 sans données, résumé de plus de 3 phrases. Il ne vérifie ni le sens des phrases, ni qui a
 tué qui : relisez chaque débrief.
 
-**Mesure de fidélité.** Chaque exécution met à jour `results/debriefs/review.csv` (une
+**Mesure de fidélité.** Chaque exécution met à jour `results/debriefs/review.csv` (copie des mesures : `docs/review.csv` ; une
 ligne par débrief et par mode, le mode hybride étant étiqueté `hybride v5.2`). Remplissez à
 la main `erreurs_chiffres`, `inventions` et `omissions` : vos annotations sont conservées
 quand vous relancez. Le nombre d'erreurs par débrief permet de comparer les modes et les
 modèles (`--model llama3.1:8b`). Fermez le fichier dans Excel avant de relancer.
-
-**Observations préliminaires** (Qwen2.5 7B, 3 parties, à confirmer sur une dizaine) :
-le mode `llm` produit des problèmes détectés automatiquement sur les 3 débriefs
-(causalité, sections écrites sans données, différences de pourcentages calculées) et
-des erreurs que seule la relecture trouve (un kill attribué au mauvais joueur) ; le
-résumé du mode hybride contenait encore des formulations causales et des fautes de
-français, d'où la reprise automatique.
 
 ### Avec Docker
 

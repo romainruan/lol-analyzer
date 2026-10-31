@@ -47,18 +47,15 @@ EUW1_8017288583,qwen2.5:7b (hybride v5),ok,1,1,0,« plus bas niveau de 13 % » a
 EUW1_8017315091,qwen2.5:7b (hybride v5),ok,0,0,0,
 EUW1_8017352061,qwen2.5:7b (hybride v5),ok,0,0,0,
 EUW1_8017411707,qwen2.5:7b (hybride v5),ok,0,0,0,« s'est maintenue » : minimum et fin à la même minute
-EUW1_8014185978,qwen2.5:7b (hybride v5.1),ok,,,,
-EUW1_8014208066,qwen2.5:7b (hybride v5.1),ok (tentative 2/3),,,,
-EUW1_8014251854,qwen2.5:7b (hybride v5.1),ok (tentative 2/3),,,,
-EUW1_8014277596,qwen2.5:7b (hybride v5.1),ok,,,,
-EUW1_8015537805,qwen2.5:7b (hybride v5.1),ok,,,,
-EUW1_8015593577,qwen2.5:7b (hybride v5.1),ok,,,,
-EUW1_8016459544,qwen2.5:7b (hybride v5.1),ok (tentative 3/3),,,,
-EUW1_8016484718,qwen2.5:7b (hybride v5.1),ok (tentative 2/3),,,,
+EUW1_8014185978,qwen2.5:7b (hybride v5.1),ok,0,0,0,
+EUW1_8014208066,qwen2.5:7b (hybride v5.1),ok (tentative 2/3),0,0,0,formulation redondante (minimum = fin)
+EUW1_8014251854,qwen2.5:7b (hybride v5.1),ok (tentative 2/3),1,0,0,30 % et 22 % attribués tous deux à la 7e minute (« répétition » retiré mais l'erreur reste)
+EUW1_8014277596,qwen2.5:7b (hybride v5.1),ok,0,0,0,
+EUW1_8015537805,qwen2.5:7b (hybride v5.1),ok,0,0,0,
+EUW1_8015593577,qwen2.5:7b (hybride v5.1),ok,0,0,0,ordre chronologique mélangé (24e puis 8e minute)
+EUW1_8016459544,qwen2.5:7b (hybride v5.1),ok (tentative 3/3),1,0,0,22 % et 16 % attribués tous deux à la 6e minute ; accepté à la 3e tentative
+EUW1_8016484718,qwen2.5:7b (hybride v5.1),ok (tentative 2/3),0,0,0,
 EUW1_8017288583,qwen2.5:7b (hybride v5.1),repli gabarit : formulation causale ou hors faits : suite à,0,0,0,repli après 3 tentatives ; texte écrit par le code
-EUW1_8017315091,qwen2.5:7b (hybride v5.1),ok,,,,
-EUW1_8017352061,qwen2.5:7b (hybride v5.1),ok,,,,
-EUW1_8017411707,qwen2.5:7b (hybride v5.1),ok (tentative 2/3),,,,
-EUW1_8014185978,qwen2.5:7b (hybride v5.2),ok,,,,
-EUW1_8014208066,qwen2.5:7b (hybride v5.2),ok,,,,
-EUW1_8014251854,qwen2.5:7b (hybride v5.2),ok (tentative 2/3),,,,
+EUW1_8017315091,qwen2.5:7b (hybride v5.1),ok,0,0,0,
+EUW1_8017352061,qwen2.5:7b (hybride v5.1),ok,0,0,0,
+EUW1_8017411707,qwen2.5:7b (hybride v5.1),ok (tentative 2/3),0,0,0,
