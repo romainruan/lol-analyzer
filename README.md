@@ -62,7 +62,7 @@ fautive si au moins une erreur de chiffre, d'invention ou d'omission a été tro
 
 Réserves : v4 à v5.1 : mesurés sur les mêmes 12 parties, contrôles ajustés au fil des erreurs. v5.2 : mesurée sur 39 parties nouvelles, contrôles figés avant la mesure ; 4 résumés ont été remplacés par le texte du code après 3 échecs du modèle. Un seul relecteur.
 
-**Pistes** : repères par champion et par rang (Grandmaster), percentile de votre moyenne parmi les
+**Pistes** : repères par rang (Grandmaster), percentile de votre moyenne parmi les
 moyennes de joueurs (voir Limites), interprétation du modèle (SHAP), interface Streamlit.
 
 ## Démarrage
@@ -114,15 +114,21 @@ avec l'écart d'or de chaque lane. Sorties dans `results/` :
 `metrics_by_minute.csv`, `auc_by_minute.png` (AUC avec intervalle de confiance
 bootstrap), `lane_coefficients.csv` (poids de chaque lane) et `calibration.csv`.
 
-### 4. Repères mid et comparaison avec vos parties
+### 4. Repères par poste et comparaison avec vos parties
 
 ```bash
-python -m src.benchmarks --raw-dir data/raw/sample --me-dir data/raw/me
+python -m src.benchmarks --raw-dir data/raw/sample --me-dir data/raw/me --label Master
 ```
 
-Affiche les percentiles des mid laners de l'échantillon (CS/min, vision/min, KDA,
-participation aux kills, part des dégâts, CS/or/XP à 10 min) et situe vos propres
-parties en mid par rapport à eux. `collect --riot-id` enregistre votre puuid dans
+Affiche, poste par poste, les percentiles des joueurs de l'échantillon (CS/min, vision/min, KDA,
+participation aux kills, part des dégâts, CS/or/XP à 10 min) et situe vos propres parties par rapport à eux.
+`--label` donne le nom de l'échantillon dans les phrases (« mieux que 80 % des jungle Gold »).
+
+Le débrief compare chaque partie aux joueurs du même poste, et au même champion dès que l'échantillon en contient
+30 parties (« Ahri mid Master »). Il ne juge pas un support sur son farm ou sa part des dégâts, et adapte ses conseils
+au jungler et au support. Un ancien `data/mid_benchmarks.csv` reste utilisable, pour le mid uniquement.
+
+`collect --riot-id` enregistre votre puuid dans
 `data/raw/me/puuid.txt` pour retrouver vos parties. Attention : votre **moyenne** est placée dans la
 distribution de parties **individuelles** de la référence ; une moyenne varie moins qu'une partie, donc
 l'écart réel avec les autres joueurs est plus marqué que le percentile affiché.
@@ -306,8 +312,9 @@ n'est publié, ce qui évite tout conflit avec un Ollama déjà lancé sur votre
 - Fidélité des débriefs mesurée sur 51 parties et par un seul relecteur ; le modèle de 7 milliards de
   paramètres (Qwen2.5 7B) échoue encore 3 fois de suite sur environ 10 % des parties, qui reçoivent alors
   le texte écrit par le code.
-- Les repères mid comparent une moyenne à des parties individuelles (voir plus haut), et mélangent tous
-  les champions : un percentile bas n'est pas forcément un défaut.
+- Les repères comparent une moyenne à des parties individuelles (voir plus haut). Un champion n'a ses propres repères
+  qu'à partir de 30 parties, et la tendance habituelle mélange tous vos champions : un percentile bas n'est pas
+  forcément un défaut. Les conseils par poste sont écrits à la main, et leur effet sur le jeu n'est pas mesuré.
 - Les parties d'entraînement viennent de cinq semaines et de trois patchs : la validité sur une autre
   saison n'est pas testée.
 
