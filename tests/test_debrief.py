@@ -661,6 +661,20 @@ def test_check_claims_flags_a_value_the_facts_never_give_at_this_minute():
         "92 % associé à la 8e minute : valeur que les faits ne placent pas là"]
 
 
+def test_check_claims_does_not_take_a_duration_for_a_moment_of_the_game():
+    # « CS à 2 minutes » est une durée : son percentile n'est pas une valeur de la courbe à la 2e minute
+    text = "Son minimum (45 %) est à la 2e minute. CS à 2 minutes : mieux que 41 % des mid Master."
+    assert check_claims(text, v5_brief()) == []
+
+
+def test_check_claims_does_not_take_a_jump_for_two_values_at_one_minute():
+    # le saut de la 8e minute et le minimum à la 8e minute décrivent la même courbe
+    brief = v5_brief()
+    brief["_courbe"].update(plus_bas_pct=55, minutes_au_plus_bas=[8])
+    text = "Son minimum (55 %) est à la 8e minute. 8e minute : elle passe de 68 % à 55 %."
+    assert check_claims(text, brief) == []
+
+
 def test_check_claims_flags_a_transition_given_at_the_wrong_minute():
     assert check_claims("À la 15e minute, elle passe de 68 % à 55 %.", v5_brief()) == [
         "transition de 68 % à 55 % citée à la 15e minute : les faits la placent à la 8e"]

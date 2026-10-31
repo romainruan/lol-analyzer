@@ -672,9 +672,11 @@ def check_claims(text: str, brief: dict) -> list[str]:
                                   f"valeur {extreme}que les faits ne placent pas là")
     # une même minute ne peut pas porter deux valeurs (« 30 % à la 7e minute, 22 % à la 7e minute »)
     seen: dict[int, set[float]] = {}
-    for clause in _CLAUSE_SPLIT.split(text):
+    sentences = re.split(r"(?<=[.!?])\s+|\n+", text)
+    for clause in (c for sentence in sentences for c in _CLAUSE_SPLIT.split(sentence)):
+        clause = _TRANSITION.sub("", clause)  # un saut décrit deux minutes : il ne contredit pas une valeur citée
         c_pcts = [(m.start(), float(m.group(1).replace(",", "."))) for m in _PCT_POS.finditer(clause)]
-        for m in _MINUTE_REF.finditer(clause):
+        for m in _ORDINAL_MINUTE.finditer(clause):
             near = [(abs(a - m.start()), v) for a, v in c_pcts if abs(a - m.start()) <= 40]
             if near:
                 seen.setdefault(int(m.group(1) or m.group(2)), set()).add(min(near)[1])
@@ -853,7 +855,14 @@ def _select_ids(curves_dir: Path, match_id: str | None, limit: int,
     return [f.stem for f in files if f.stem not in (exclude or set())][:limit]
 
 
-def main() -> None:
+def _written_ids(out_dir: Path, suffix: str) -> set[str]:
+    """Parties qui ont déjà un débrief écrit dans ce mode."""
+    others = [s for s in ("_llm", "_gabarit") if s != suffix]
+    return {path.stem.removesuffix(suffix) for path in out_dir.glob(f"*{suffix}.md")
+            if not path.stem.endswith(tuple(others))}
+
+
+def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--raw-dir", default="data/raw/me", help="parties brutes + puuid.txt")
     p.add_argument("--curves", default="results/curves")
@@ -864,6 +873,8 @@ def main() -> None:
     p.add_argument("--only-unreviewed", action="store_true",
                    help="ignore les parties déjà présentes dans review.csv : sert à tester sur des "
                         "parties que vous n'avez jamais relues")
+    p.add_argument("--only-missing", action="store_true",
+                   help="ignore les parties qui ont déjà un débrief dans ce mode (ne traite que les nouvelles)")
     p.add_argument("--model", default=DEFAULT_MODEL)
     p.add_argument("--attempts", type=int, default=MAX_ATTEMPTS,
                    help="mode hybride : tentatives du modèle avant le résumé de repli (défaut 3)")
@@ -875,7 +886,7 @@ def main() -> None:
     p.add_argument("--recheck", metavar="DOSSIER",
                    help="rejoue le contrôle sur les débriefs déjà écrits de ce dossier, sans LLM, et s'arrête")
     p.add_argument("--review", help="avec --recheck : fiche de relecture (défaut : review.csv du dossier)")
-    args = p.parse_args()
+    args = p.parse_args(argv)
     mode = "template" if args.no_llm else args.mode
 
     if args.recheck:
@@ -901,12 +912,18 @@ def main() -> None:
             if len(rows) >= MIN_PROFILE_GAMES and len(reference) >= MIN_REFERENCE_ROWS:
                 profiles[role] = (len(rows), compare(rows, reference), label)
 
-    exclude = reviewed_ids(Path(args.out) / "review.csv") if args.only_unreviewed else None
+    out_dir = Path(args.out)
+    suffix = {"hybrid": "", "llm": "_llm", "template": "_gabarit"}[mode]
+    exclude = reviewed_ids(out_dir / "review.csv") if args.only_unreviewed else set()
+    if args.only_missing:
+        exclude |= _written_ids(out_dir, suffix)
     ids = _select_ids(curves_dir, args.match_id, args.limit, exclude)
     if not ids:
+        if args.only_missing and any(curves_dir.glob("*.json")):
+            print("Aucun nouveau débrief à écrire.")
+            return
         raise SystemExit(f"Aucune analyse dans {curves_dir} : lancez `python -m src.winprob analyze`.")
 
-    out_dir = Path(args.out)
     model_name = {"template": "gabarit (sans LLM)", "hybrid": f"{args.model} (hybride v5.3)",
                   "llm": f"{args.model} (complet)"}[mode]
     review_rows = []
@@ -957,7 +974,6 @@ def main() -> None:
             raise SystemExit(str(e)) from e
         control = control or ("; ".join(issues) or "ok")
         out_dir.mkdir(parents=True, exist_ok=True)
-        suffix = {"hybrid": "", "llm": "_llm", "template": "_gabarit"}[mode]
         (out_dir / f"{match_id}{suffix}.md").write_text(
             render_markdown(match_id, brief, text, issues, model_name, note), encoding="utf-8")
         review_rows.append({"match_id": match_id, "modele": model_name, "controle_auto": control})

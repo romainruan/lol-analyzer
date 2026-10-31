@@ -638,7 +638,7 @@ def cmd_analyze(args: argparse.Namespace) -> None:
     print(f"\nFichiers écrits dans {out_dir}/")
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -686,7 +686,7 @@ def main() -> None:
     a.add_argument("--out", default="results/curves")
     a.set_defaults(func=cmd_analyze)
 
-    args = p.parse_args()
+    args = p.parse_args(argv)
     args.func(args)
 
 

@@ -109,6 +109,33 @@ def test_network_error_gives_up_after_max_retries(monkeypatch):
     assert session.calls == 3
 
 
+@pytest.mark.parametrize("platform, region", [("kr", "asia"), ("na1", "americas"), ("EUN1", "europe"), ("sg2", "sea")])
+def test_region_follows_the_platform(monkeypatch, platform, region):
+    monkeypatch.setenv("RIOT_REGION", "europe")  # celle du .env : le choix explicite de la plateforme passe avant
+    assert RiotClient(api_key="k", platform=platform).region == region
+
+
+def test_region_can_still_be_forced_and_comes_from_the_environment(monkeypatch):
+    assert RiotClient(api_key="k", platform="kr", region="americas").region == "americas"
+    monkeypatch.setenv("RIOT_PLATFORM", "na1")
+    monkeypatch.setenv("RIOT_REGION", "americas")
+    client = RiotClient(api_key="k")
+    assert (client.platform, client.region) == ("na1", "americas")
+
+
+def test_platform_alone_in_the_environment_gives_its_region(monkeypatch):
+    monkeypatch.setenv("RIOT_PLATFORM", "kr")
+    monkeypatch.delenv("RIOT_REGION", raising=False)
+    assert RiotClient(api_key="k").region == "asia"
+
+
+def test_accounts_are_not_served_by_the_sea_region():
+    session = FakeSession([FakeResponse(200, {"puuid": "abc"})])
+    client = RiotClient(api_key="k", platform="sg2", min_interval=0, session=session)
+    assert client.get_puuid("Pseudo", "SG2") == "abc"
+    assert session.calls[0][0].startswith("https://asia.api.riotgames.com/riot/account/")
+
+
 def test_missing_key_raises(monkeypatch):
     monkeypatch.delenv("RIOT_API_KEY", raising=False)
     with pytest.raises(RiotAPIError):

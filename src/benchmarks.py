@@ -148,13 +148,13 @@ def compare(me: pd.DataFrame, bench: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(out)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--raw-dir", default="data/raw/sample")
     p.add_argument("--me-dir", default="data/raw/me")
     p.add_argument("--out", default=str(DEFAULT_BENCH))
     p.add_argument("--label", default=DEFAULT_REFERENCE, help="nom de l'échantillon dans les phrases, ex. Gold")
-    args = p.parse_args()
+    args = p.parse_args(argv)
 
     bench = build_benchmark(Path(args.raw_dir))
     if bench.empty:

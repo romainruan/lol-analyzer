@@ -25,21 +25,22 @@ def build_dataset(raw_dir: Path, minutes=DEFAULT_MINUTES) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--raw-dir", default="data/raw/sample")
     p.add_argument("--out", default="data/dataset.csv")
     p.add_argument("--all-minutes", action="store_true",
                    help="une ligne par minute (2 à 40) au lieu de 5/10/15/20/25")
-    args = p.parse_args()
+    args = p.parse_args(argv)
 
     minutes = range(2, 41) if args.all_minutes else DEFAULT_MINUTES
     df = build_dataset(Path(args.raw_dir), minutes)
+    if df.empty:
+        raise SystemExit(f"Aucune partie dans {args.raw_dir} : lancez d'abord `python -m src.collect`.")
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out, index=False)
-    n = df["match_id"].nunique() if not df.empty else 0
-    print(f"{len(df)} lignes ({n} parties) -> {out}")
+    print(f"{len(df)} lignes ({df['match_id'].nunique()} parties) -> {out}")
 
 
 if __name__ == "__main__":
