@@ -81,11 +81,6 @@ def role_rows(match: dict, timeline: dict | None = None) -> list[dict]:
     return rows
 
 
-def mid_rows(match: dict, timeline: dict | None = None) -> list[dict]:
-    """Statistiques des mid laners d'une partie (vide si le rôle est ambigu)."""
-    return [r for r in role_rows(match, timeline) if r["role"] == "MIDDLE"]
-
-
 def build_benchmark(raw_dir: Path) -> pd.DataFrame:
     rows: list[dict] = []
     for match_path in sorted((raw_dir / "matches").glob("*.json")):

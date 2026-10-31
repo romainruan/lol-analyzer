@@ -667,6 +667,59 @@ def test_check_claims_does_not_take_a_duration_for_a_moment_of_the_game():
     assert check_claims(text, v5_brief()) == []
 
 
+def test_check_claims_still_reads_a_plural_as_a_moment_of_the_curve():
+    brief = v5_brief()
+    brief["_courbe"].update(plus_bas_pct=0, minutes_au_plus_bas=[29])
+    assert check_claims("Elle chute à 0 % à 15 minutes.", brief) == [
+        "0 % associé à la 15e minute : valeur extrême que les faits ne placent pas là"]
+    assert check_claims("Elle est à 92 % à 8 minutes, puis à 55 % à 8 minutes.", v5_brief())
+
+
+def test_check_claims_ignores_the_length_of_the_game():
+    assert check_claims("Défaite en 22 minutes avec 45 % au départ.", v5_brief()) == []
+
+
+@pytest.mark.parametrize("problem", ["timeout", "500"])
+def test_chat_explains_any_ollama_failure(monkeypatch, problem):
+    import requests
+
+    class Response:
+        status_code = 500
+        ok = False
+
+    def post(self, *a, **kw):
+        if problem == "timeout":
+            raise requests.Timeout("trop long")
+        return Response()
+
+    monkeypatch.setattr(requests.Session, "post", post)
+    with pytest.raises(OllamaError, match="Ollama"):
+        chat([{"role": "user", "content": "x"}])
+
+
+@pytest.mark.parametrize("encoding, delimiter", [("cp1252", ";"), ("utf-8-sig", ";"), ("utf-8-sig", ","), ("utf-8", ",")])
+def test_review_sheet_saved_by_any_excel_keeps_manual_columns(tmp_path, encoding, delimiter):
+    from src.debrief import recheck, reviewed_ids
+
+    path = tmp_path / "review.csv"
+    header = delimiter.join(["match_id", "modele", "controle_auto", "erreurs_chiffres", "inventions", "omissions", "remarques"])
+    row = delimiter.join(["EUW1_1", "m", "ancien", "2", "", "", "écart relu"])
+    path.write_text(f"{header}\n{row}\n", encoding=encoding, newline="")
+    assert reviewed_ids(path) == {"EUW1_1"}
+    assert recheck(tmp_path, path).empty
+    append_review_rows(path, [{"match_id": "EUW1_1", "modele": "m", "controle_auto": "ok"}])
+    with path.open(encoding="utf-8", newline="") as f:
+        data = list(csv.DictReader(f))
+    assert data[0]["controle_auto"] == "ok" and data[0]["remarques"] == "écart relu"
+
+
+def test_stat_without_any_reference_value_is_left_out_of_the_comparison():
+    bench = bench_frame().assign(cs_at_10=np.nan)
+    facts = build_facts(ANALYSIS, _match(), _timeline(), "p3", bench)
+    assert "cs_a_10_min" not in facts["comparaison"]
+    assert "cs_par_min" in facts["comparaison"]
+
+
 def test_check_claims_does_not_take_a_jump_for_two_values_at_one_minute():
     # le saut de la 8e minute et le minimum à la 8e minute décrivent la même courbe
     brief = v5_brief()

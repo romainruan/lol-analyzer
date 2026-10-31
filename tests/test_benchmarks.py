@@ -4,7 +4,6 @@ from src.benchmarks import (
     STAT_COLS,
     compare,
     load_benchmarks,
-    mid_rows,
     reference_for,
     role_rows,
 )
@@ -40,7 +39,7 @@ def _timeline():
 
 
 def test_mid_rows_stats():
-    rows = mid_rows(_match(), _timeline())
+    rows = role_rows(_match(), _timeline())
     assert len(rows) == 2
     blue = next(r for r in rows if r["puuid"] == "p3")
     assert blue["cs_per_min"] == 220 / 30
@@ -52,7 +51,7 @@ def test_mid_rows_stats():
 
 
 def test_short_game_is_ignored():
-    assert mid_rows(_match(duration_s=600), _timeline()) == []
+    assert role_rows(_match(duration_s=600), _timeline()) == []
 
 
 def test_compare_percentile():

@@ -593,15 +593,18 @@ def cmd_learning_curve(args: argparse.Namespace) -> None:
     print(table.round(4).to_string(index=False))
 
 
-def select_ids(raw_dir: Path, out_dir: Path, limit: int, skip_existing: bool = False) -> list[str]:
-    """Les `limit` parties les plus récentes. Avec `skip_existing`, celles qui ont déjà une courbe
-    dans `out_dir` sont écartées avant de compter : on ne traite que les nouvelles."""
+def select_ids(raw_dir: Path, out_dir: Path, limit: int, skip_existing: bool = False,
+               not_before: float = 0.0) -> list[str]:
+    """Les `limit` parties les plus récentes. Avec `skip_existing`, celles qui ont déjà une courbe dans
+    `out_dir` sont écartées avant de compter, sauf si cette courbe date d'avant `not_before` (l'entraînement
+    du modèle) : on ne traite que les nouvelles parties et les courbes périmées."""
     files = sorted((raw_dir / "matches").glob("*.json"),
                    key=lambda f: json.loads(f.read_text(encoding="utf-8"))["info"]
                    .get("gameCreation", 0), reverse=True)
     ids = [f.stem for f in files]
     if skip_existing:
-        ids = [i for i in ids if not (out_dir / f"{i}.json").exists()]
+        curves = {i: out_dir / f"{i}.json" for i in ids}
+        ids = [i for i in ids if not curves[i].exists() or curves[i].stat().st_mtime < not_before]
     return ids[:limit]
 
 
@@ -618,7 +621,7 @@ def cmd_analyze(args: argparse.Namespace) -> None:
     if args.match_id:
         ids = [args.match_id]
     else:
-        ids = select_ids(raw_dir, Path(args.out), args.limit, args.skip_existing)
+        ids = select_ids(raw_dir, Path(args.out), args.limit, args.skip_existing, Path(args.model).stat().st_mtime)
 
     out_dir = Path(args.out)
     for match_id in ids:
@@ -686,7 +689,7 @@ def main(argv: list[str] | None = None) -> None:
     a.add_argument("--match-id")
     a.add_argument("--limit", type=int, default=5)
     a.add_argument("--skip-existing", action="store_true",
-                   help="ignore les parties qui ont déjà une courbe (ne traite que les nouvelles)")
+                   help="ignore les parties qui ont déjà une courbe, sauf si elle date d'avant l'entraînement du modèle")
     a.add_argument("--top", type=int, default=3, help="nombre de moments clés")
     a.add_argument("--model", default="results/curve_model.joblib")
     a.add_argument("--out", default="results/curves")

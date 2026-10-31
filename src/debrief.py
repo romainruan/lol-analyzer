@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import json
 import os
 import re
@@ -159,9 +160,11 @@ _SPELLED_MINUTE = re.compile(
 _CHAMPION = re.compile(r"(\w+) \((?:alliés|ennemis|bleus|rouges)\)")
 _MINUTE_REF = re.compile(r"(?<!\d)(\d{1,2})\s*(?:e|ème|er|re)?\s+minutes?\b|\bminutes?\s+(\d{1,2})\b",
                          re.IGNORECASE)
-# un moment de la partie : « 30e minute », « la 30e », « minute 30 » (pas « 10 minutes », qui est une durée)
-_ORDINAL_MINUTE = re.compile(r"(?<![\d,.])(\d{1,2})\s*(?:e|ème|er|re)\b(?:\s+minutes?)?|\bminute\s+(\d{1,2})\b",
-                             re.IGNORECASE)
+# un moment de la partie : « 30e minute », « la 30e », « 30 minutes », « minute 30 »
+_ORDINAL_MINUTE = re.compile(r"(?<![\d,.])(\d{1,2})(?:\s*(?:e|ème|er|re)\b(?:\s+minutes?)?|\s+minutes?\b)"
+                             r"|\bminutes?\s+(\d{1,2})\b", re.IGNORECASE)
+# des durées, pas des moments : une statistique (« CS à 10 minutes ») et la longueur de la partie (« en 22 minutes »)
+_NOT_A_MOMENT = re.compile(r"\b(?:CS|XP|Or total gagné) à \d+ minutes?\b|\ben \d+ minutes?\b", re.IGNORECASE)
 # ce que le résumé du mode hybride a le droit de citer : le reste du brief ne lui est pas montré
 SUMMARY_FACTS = ("partie", "courbe", "variations_courbe")
 
@@ -237,7 +240,7 @@ def build_facts(
                     "percentile": _percentile(row[col], reference[col]),
                 }
                 for col in STAT_COLS
-                if row.get(col) is not None and not pd.isna(row[col])
+                if row.get(col) is not None and not pd.isna(row[col]) and reference[col].notna().any()
             }
     else:
         facts["stats"].update(_basic_stats(me, minutes))
@@ -269,18 +272,20 @@ def build_facts(
             "minutes_au_plus_bas": [m for m, v in zip(minutes_curve, pcts, strict=True) if v == min(pcts)],
             "premiere_minute": minutes_curve[0],
         }
-    facts["moments_cles"] = [
-        {
-            "minute": tp["minute"],
-            "avant_pct": round(tp["win_prob_before"] * 100),
-            "apres_pct": round(tp["win_prob_after"] * 100),
-            "evenements": collapse_duplicates(tp["events"])[:4],
-            "ecarts": tp.get("ecarts", {}),  # absents des analyses produites par une ancienne version
-            "contributions": tp.get("contributions", {}),
-        }
-        for tp in analysis["turning_points"]
-    ]
+    facts["moments_cles"] = [moment_facts(tp) for tp in analysis["turning_points"]]
     return facts
+
+
+def moment_facts(tp: dict) -> dict:
+    """Un moment clé de l'analyse, tel que les phrases l'utilisent."""
+    return {
+        "minute": tp["minute"],
+        "avant_pct": round(tp["win_prob_before"] * 100),
+        "apres_pct": round(tp["win_prob_after"] * 100),
+        "evenements": collapse_duplicates(tp["events"])[:4],
+        "ecarts": tp.get("ecarts", {}),  # absents des analyses produites par une ancienne version
+        "contributions": tp.get("contributions", {}),
+    }
 
 
 # ----------------------------------------------------------------------------- phrases
@@ -439,9 +444,12 @@ def chat(messages: list[dict], model: str = DEFAULT_MODEL, host: str | None = No
         raise OllamaError(
             f"Ollama ne répond pas sur {host}. Lancez `ollama serve` dans un autre terminal."
         ) from e
+    except requests.Timeout as e:
+        raise OllamaError(f"Ollama n'a pas répondu en {timeout} s : le modèle est peut-être trop lent ici.") from e
     if r.status_code == 404:
         raise OllamaError(f"Modèle introuvable : lancez `ollama pull {model}`.")
-    r.raise_for_status()
+    if not r.ok:
+        raise OllamaError(f"Ollama a renvoyé l'erreur {r.status_code}.")
     return r.json()["message"]["content"].strip()
 
 
@@ -660,7 +668,7 @@ def check_claims(text: str, brief: dict) -> list[str]:
         # une valeur associée à une minute doit être celle que les faits y placent (ex. « 0 % à la 15e
         # minute ») : pour chaque minute citée, le pourcentage le plus proche dans la même proposition
         for clause in _CLAUSE_SPLIT.split(sentence):
-            clause = _TRANSITION.sub("", clause)
+            clause = _NOT_A_MOMENT.sub("", _TRANSITION.sub("", clause))
             c_pcts = [(m.start(), float(m.group(1).replace(",", "."))) for m in _PCT_POS.finditer(clause)]
             for m in _ORDINAL_MINUTE.finditer(clause):
                 minute = int(m.group(1) or m.group(2))
@@ -674,7 +682,8 @@ def check_claims(text: str, brief: dict) -> list[str]:
     seen: dict[int, set[float]] = {}
     sentences = re.split(r"(?<=[.!?])\s+|\n+", text)
     for clause in (c for sentence in sentences for c in _CLAUSE_SPLIT.split(sentence)):
-        clause = _TRANSITION.sub("", clause)  # un saut décrit deux minutes : il ne contredit pas une valeur citée
+        # un saut décrit deux minutes : il ne contredit pas une valeur citée
+        clause = _NOT_A_MOMENT.sub("", _TRANSITION.sub("", clause))
         c_pcts = [(m.start(), float(m.group(1).replace(",", "."))) for m in _PCT_POS.finditer(clause)]
         for m in _ORDINAL_MINUTE.finditer(clause):
             near = [(abs(a - m.start()), v) for a, v in c_pcts if abs(a - m.start()) <= 40]
@@ -777,6 +786,18 @@ REVIEW_COLUMNS = ["match_id", "modele", "controle_auto", "erreurs_chiffres", "in
                   "omissions", "remarques"]
 
 
+def read_review(path: Path) -> list[dict]:
+    """Lit la fiche de relecture, y compris enregistrée par Excel : BOM, ou « ; » et Windows-1252 en français."""
+    raw = path.read_bytes()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("cp1252")
+    header = text.split("\n", 1)[0]
+    delimiter = ";" if header.count(";") > header.count(",") else ","
+    return list(csv.DictReader(io.StringIO(text, newline=""), delimiter=delimiter))
+
+
 def append_review_rows(path: Path, rows: list[dict]) -> None:
     """Fiche de relecture manuelle (à ouvrir dans Excel) : une ligne par débrief et par mode.
 
@@ -786,8 +807,7 @@ def append_review_rows(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     existing: list[dict] = []
     if path.exists():
-        with path.open(encoding="utf-8-sig", newline="") as f:  # -sig : tolère l'en-tête ajouté par Excel
-            existing = list(csv.DictReader(f))
+        existing = read_review(path)
     index = {(r["match_id"], r["modele"]): r for r in existing}
     for r in rows:
         key = (r["match_id"], r["modele"])
@@ -809,11 +829,10 @@ def recheck(folder: Path, review: Path | None = None) -> pd.DataFrame:
     Les gabarits, le mode `llm` et les résumés de repli sont ignorés : ce n'est pas un résumé du modèle."""
     annotated: dict[tuple[str, str], int] = {}
     if review is not None and review.exists():
-        with review.open(encoding="utf-8-sig", newline="") as f:
-            for row in csv.DictReader(f):
-                if row["erreurs_chiffres"] != "":
-                    annotated[row["match_id"], row["modele"]] = sum(
-                        int(row[c] or 0) for c in ("erreurs_chiffres", "inventions", "omissions"))
+        for row in read_review(review):
+            if row["erreurs_chiffres"] != "":
+                annotated[row["match_id"], row["modele"]] = sum(
+                    int(row[c] or 0) for c in ("erreurs_chiffres", "inventions", "omissions"))
     rows = []
     for path in sorted(folder.glob("*.md")):
         text = path.read_text(encoding="utf-8")
@@ -843,8 +862,7 @@ def reviewed_ids(path: Path) -> set[str]:
     """Parties déjà présentes dans la fiche de relecture (quel que soit le mode)."""
     if not path.exists():
         return set()
-    with path.open(encoding="utf-8-sig", newline="") as f:  # -sig : tolère l'en-tête ajouté par Excel
-        return {row["match_id"] for row in csv.DictReader(f)}
+    return {row["match_id"] for row in read_review(path)}
 
 
 def _select_ids(curves_dir: Path, match_id: str | None, limit: int,
@@ -855,11 +873,16 @@ def _select_ids(curves_dir: Path, match_id: str | None, limit: int,
     return [f.stem for f in files if f.stem not in (exclude or set())][:limit]
 
 
-def _written_ids(out_dir: Path, suffix: str) -> set[str]:
-    """Parties qui ont déjà un débrief écrit dans ce mode."""
-    others = [s for s in ("_llm", "_gabarit") if s != suffix]
-    return {path.stem.removesuffix(suffix) for path in out_dir.glob(f"*{suffix}.md")
-            if not path.stem.endswith(tuple(others))}
+def _written_ids(out_dir: Path, suffix: str, curves_dir: Path) -> set[str]:
+    """Parties qui ont déjà un débrief à jour dans ce mode : écrit après la courbe, sinon il la contredirait."""
+    others = tuple(s for s in ("_llm", "_gabarit") if s != suffix)
+    written = set()
+    for path in out_dir.glob(f"*{suffix}.md"):
+        match_id = path.stem.removesuffix(suffix)
+        curve = curves_dir / f"{match_id}.json"
+        if not path.stem.endswith(others) and (not curve.exists() or path.stat().st_mtime >= curve.stat().st_mtime):
+            written.add(match_id)
+    return written
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -916,7 +939,7 @@ def main(argv: list[str] | None = None) -> None:
     suffix = {"hybrid": "", "llm": "_llm", "template": "_gabarit"}[mode]
     exclude = reviewed_ids(out_dir / "review.csv") if args.only_unreviewed else set()
     if args.only_missing:
-        exclude |= _written_ids(out_dir, suffix)
+        exclude |= _written_ids(out_dir, suffix, curves_dir)
     ids = _select_ids(curves_dir, args.match_id, args.limit, exclude)
     if not ids:
         if args.only_missing and any(curves_dir.glob("*.json")):

@@ -115,6 +115,11 @@ def test_support_priorities_ignore_farm_and_damage():
     assert {"cs_per_min", "cs_at_10", "damage_share"}.isdisjoint(p["stat"] for p in result)
 
 
+def test_priorities_skip_a_stat_without_any_reference_value():
+    result = priorities(history_of([5.5] * 10), _bench().assign(cs_at_10=np.nan), "MIDDLE", window=10, k=8)
+    assert "cs_at_10" not in {p["stat"] for p in result} and len(result) == 7
+
+
 def test_priorities_are_empty_without_references():
     assert priorities(history_of([5.0] * 10), None, "MIDDLE") == []
     assert priorities(history_of([5.0] * 10), _bench("TOP"), "MIDDLE") == []

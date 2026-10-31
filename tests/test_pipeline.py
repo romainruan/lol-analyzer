@@ -1,5 +1,6 @@
 """La chaîne complète, de la collecte au rapport, sur des parties synthétiques (ni réseau, ni clé, ni Ollama)."""
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -73,6 +74,35 @@ def test_a_second_report_only_adds_what_is_new(project):
     first = {p: p.stat().st_mtime_ns for p in Path("results/debriefs").glob("*.md")}
     report()
     assert {p: p.stat().st_mtime_ns for p in Path("results/debriefs").glob("*.md")} == first
+
+
+def test_a_retrained_model_replaces_the_old_curves_and_debriefs(project):
+    prepare()
+    report()
+    written = [*Path("results/curves").glob("*.json"), *Path("results/debriefs").glob("*.md")]
+    old = Path("results/curve_model.joblib").stat().st_mtime - 100  # tout date d'avant le dernier entraînement
+    for path in written:
+        os.utime(path, (old, old))
+    report("--no-collect")
+    assert [p.name for p in written if p.stat().st_mtime == old] == []
+
+
+def test_missing_or_expired_key_gives_a_message_instead_of_a_trace(tmp_path, monkeypatch):
+    from src.riot_client import AuthError
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("RIOT_API_KEY", raising=False)
+    monkeypatch.setattr("src.collect.load_dotenv", lambda: None)
+    with pytest.raises(SystemExit, match="RIOT_API_KEY"):
+        run.main(["report", "--riot-id", "Pseudo#EUW"])
+
+    class Expired:
+        def get_puuid(self, *a):
+            raise AuthError("403 : clé invalide ou expirée")
+
+    monkeypatch.setattr("src.collect.RiotClient", lambda **kw: Expired())
+    with pytest.raises(SystemExit, match="expirée"):
+        run.main(["report", "--riot-id", "Pseudo#EUW"])
 
 
 def test_report_without_a_model_still_gives_the_trends(project, capsys):

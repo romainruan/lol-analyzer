@@ -92,6 +92,13 @@ def collect_for_puuid(client: RiotClient, puuid: str, raw_dir: Path, count: int,
 
 
 def main(argv: list[str] | None = None) -> None:
+    try:
+        _collect(argv)
+    except RiotAPIError as error:  # clé absente ou expirée, Riot injoignable : un message suffit
+        raise SystemExit(str(error)) from error
+
+
+def _collect(argv: list[str] | None) -> None:
     load_dotenv()
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--riot-id", help='Votre Riot ID, ex. "Pseudo#EUW"')
