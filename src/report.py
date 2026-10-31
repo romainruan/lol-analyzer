@@ -302,12 +302,12 @@ def _games_html(raw_dir: Path, curves_dir: Path, debriefs_dir: Path, limit: int)
     games = []
     for path in curves_dir.glob("*.json"):
         match_path = raw_dir / "matches" / path.name
-        if match_path.exists():
+        analysis = json.loads(path.read_text(encoding="utf-8"))
+        if match_path.exists() and analysis.get("curve"):
             created = json.loads(match_path.read_text(encoding="utf-8"))["info"].get("gameCreation", 0)
-            games.append((created, path))
+            games.append((created, analysis))
     games = sorted(games, key=lambda g: g[0], reverse=True)[:limit]
-    return "".join(_game_html(json.loads(path.read_text(encoding="utf-8")), created, debriefs_dir, i == 0)
-                   for i, (created, path) in enumerate(games))
+    return "".join(_game_html(analysis, created, debriefs_dir, i == 0) for i, (created, analysis) in enumerate(games))
 
 
 def _tiles_html(history: pd.DataFrame, role: str | None, window: int) -> str:

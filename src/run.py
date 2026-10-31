@@ -14,6 +14,7 @@ import argparse
 from pathlib import Path
 
 from . import benchmarks, build_dataset, collect, debrief, report, winprob
+from .benchmarks import DEFAULT_BENCH
 
 SAMPLE_DIR = "data/raw/sample"
 ME_DIR = "data/raw/me"
@@ -40,11 +41,13 @@ def prepare(args: argparse.Namespace) -> None:
     build_dataset.main(["--raw-dir", SAMPLE_DIR, "--all-minutes", "--out", DATASET])
     winprob.main(["train", "--data", DATASET, "--model", MODEL, "--kind", args.kind, "--features", args.features,
                   "--calibration"])
-    benchmarks.main(["--raw-dir", SAMPLE_DIR, "--me-dir", ME_DIR, "--label", args.label or args.tier.capitalize()])
+    benchmarks.main(["--raw-dir", SAMPLE_DIR, "--me-dir", ME_DIR, "--out", args.bench,
+                     "--label", args.label or args.tier.capitalize()])
 
 
 def _write_debriefs(args: argparse.Namespace) -> None:
-    common = ["--raw-dir", ME_DIR, "--curves", CURVES, "--out", DEBRIEFS, "--limit", str(args.count), "--only-missing"]
+    common = ["--raw-dir", ME_DIR, "--curves", CURVES, "--bench", args.bench, "--out", DEBRIEFS,
+              "--limit", str(args.count), "--only-missing"]
     if args.llm:
         try:
             debrief.main([*common, "--mode", "hybrid", "--model", args.model])
@@ -67,8 +70,8 @@ def make_report(args: argparse.Namespace) -> None:
               "Pour les courbes et les repères, lancez `python -m src.run prepare`.)")
     if any(Path(CURVES).glob("*.json")):
         _write_debriefs(args)
-    report.main(["--raw-dir", ME_DIR, "--curves", CURVES, "--debriefs", DEBRIEFS, "--limit", str(args.count),
-                 "--window", str(args.window), "--out", args.out])
+    report.main(["--raw-dir", ME_DIR, "--curves", CURVES, "--debriefs", DEBRIEFS, "--bench", args.bench,
+                 "--limit", str(args.count), "--window", str(args.window), "--out", args.out])
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -79,6 +82,7 @@ def main(argv: list[str] | None = None) -> None:
     riot.add_argument("--no-collect", action="store_true", help="n'appelle pas Riot : utilise les parties déjà téléchargées")
     riot.add_argument("--platform", help="serveur de jeu, ex. euw1, na1, kr (défaut : RIOT_PLATFORM dans .env)")
     riot.add_argument("--min-interval", type=float, help="secondes entre deux requêtes (défaut : 1,25, pour une clé de dev)")
+    riot.add_argument("--bench", default=str(DEFAULT_BENCH), help="fichier des repères, ex. un par rang")
 
     a = sub.add_parser("prepare", parents=[riot], help="échantillon de référence, modèle et repères")
     a.add_argument("--tier", default="MASTER", help="IRON..DIAMOND, MASTER, GRANDMASTER ou CHALLENGER")
@@ -93,7 +97,7 @@ def main(argv: list[str] | None = None) -> None:
 
     b = sub.add_parser("report", parents=[riot], help="vos parties : analyse, débriefs et rapport HTML")
     b.add_argument("--riot-id", help='votre Riot ID, ex. "Pseudo#EUW"')
-    b.add_argument("--count", type=int, default=20, help="nombre de parties à télécharger et à détailler (100 au plus)")
+    b.add_argument("--count", type=int, default=20, help="nombre de parties à télécharger et à détailler")
     b.add_argument("--window", type=int, default=20, help="nombre de parties récentes pour les tendances")
     b.add_argument("--llm", action="store_true", help="le résumé de chaque partie est rédigé par un LLM local (Ollama)")
     b.add_argument("--model", default=debrief.DEFAULT_MODEL, help="avec --llm : modèle Ollama")

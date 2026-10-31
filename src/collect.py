@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 from .riot_client import AuthError, NotFound, RiotAPIError, RiotClient
 
 APEX_TIERS = {"MASTER", "GRANDMASTER", "CHALLENGER"}
+MAX_IDS_PER_CALL = 100  # au-delà, Riot refuse la requête
 
 
 def resolve_puuid(client: RiotClient, entry: dict) -> str | None:
@@ -76,10 +77,17 @@ def collect_for_puuid(client: RiotClient, puuid: str, raw_dir: Path, count: int,
                       start_time: int | None = None) -> int:
     """Télécharge `count` parties à partir de la `start`-ième (0 = la plus récente)."""
     new = 0
-    for match_id in client.get_match_ids(puuid, start=start, count=count, start_time=start_time):
-        if collect_match(client, match_id, raw_dir):
-            new += 1
-            print(f"  + {match_id}")
+    offset, end = start, start + count
+    while offset < end:
+        size = min(MAX_IDS_PER_CALL, end - offset)
+        ids = client.get_match_ids(puuid, start=offset, count=size, start_time=start_time)
+        for match_id in ids:
+            if collect_match(client, match_id, raw_dir):
+                new += 1
+                print(f"  + {match_id}")
+        if len(ids) < size:  # fin de l'historique
+            break
+        offset += size
     return new
 
 
@@ -87,7 +95,7 @@ def main(argv: list[str] | None = None) -> None:
     load_dotenv()
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--riot-id", help='Votre Riot ID, ex. "Pseudo#EUW"')
-    p.add_argument("--count", type=int, default=20, help="Nb de parties (mode --riot-id, 100 au plus)")
+    p.add_argument("--count", type=int, default=20, help="Nb de parties (mode --riot-id)")
     p.add_argument("--start", type=int, default=0,
                    help="Mode --riot-id : saute les N parties les plus récentes (ex. --start 100 "
                         "--count 100 pour remonter plus loin dans l'historique)")

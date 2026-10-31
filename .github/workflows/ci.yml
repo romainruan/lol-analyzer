@@ -1,18 +1,36 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # les versions figées, celles de l'image Docker
+          - { python: "3.12", requirements: requirements.lock }
+          # les dernières versions : prévient d'une casse à venir
+          - { python: "3.13", requirements: requirements.txt }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python }}
           cache: pip
-      - run: pip install -r requirements.txt ruff
+          cache-dependency-path: ${{ matrix.requirements }}
+      - run: pip install -r ${{ matrix.requirements }} ruff==0.17.3 pytest-cov==7.1.0
       - run: ruff check src tests
-      - run: python -m pytest -q
+      - run: python -m pytest -q --cov=src --cov-fail-under=90
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - run: docker compose config -q
       - run: docker build -t lol-analyzer .
+      - run: docker run --rm lol-analyzer python -m pytest -q

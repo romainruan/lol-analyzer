@@ -185,14 +185,14 @@ def plot_auc(metrics: pd.DataFrame, path: Path) -> None:
     plt.close(fig)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--data", default="data/dataset.csv")
     p.add_argument("--out", default="results")
     p.add_argument("--minutes", type=int, nargs="+", default=list(DEFAULT_MINUTES))
     p.add_argument("--folds", type=int, default=5)
     p.add_argument("--calib-minute", type=int, default=15)
-    args = p.parse_args()
+    args = p.parse_args(argv)
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
