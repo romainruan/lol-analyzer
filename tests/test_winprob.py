@@ -175,7 +175,7 @@ def test_curve_calibration_covers_each_phase_with_every_row():
 
 # ----------------------------------------------------------------------------- explication des sauts
 def test_jump_contributions_add_up_to_the_jump_and_name_the_family():
-    model = fit_curve_model(training_frame())
+    model = fit_curve_model(training_frame(), kind="monotone")
     # seule la famille « ressources » bouge à la minute 10
     match, timeline = fake_game([0] * 10 + [5000] * 10)
     tp = analyze_match(model, match, timeline, puuid="b1")["turning_points"][0]
@@ -188,7 +188,7 @@ def test_jump_contributions_add_up_to_the_jump_and_name_the_family():
 
 
 def test_jump_contributions_change_sign_with_the_perspective():
-    model = fit_curve_model(training_frame())
+    model = fit_curve_model(training_frame(), kind="monotone")
     match, timeline = fake_game([0] * 10 + [5000] * 10)
     blue = analyze_match(model, match, timeline, puuid="b1")["turning_points"][0]["contributions"]
     red = analyze_match(model, match, timeline, puuid="r1")["turning_points"][0]["contributions"]
@@ -202,11 +202,46 @@ def test_jump_contributions_credit_a_baron_to_objectives():
     # le modèle d'entraînement ne voit aucun Nashor : on vérifie sur un modèle qui lui donne du poids
     df = training_frame()
     df["barons_diff"] = np.where(df["blue_win"] == 1, 1, -1)
-    objective_model = fit_curve_model(df)
+    objective_model = fit_curve_model(df, kind="monotone")
     tp = next(t for t in analyze_match(objective_model, match, timeline, puuid="b1", min_delta=0.01)["turning_points"]
               if t["minute"] == 10)
     assert tp["contributions"]["objectifs"] < 0
     assert tp["contributions"]["ressources"] == 0
+
+
+def test_free_model_with_a_negative_weight_gives_no_contributions():
+    df = training_frame()
+    df["kills_diff"] = np.where(df["blue_win"] == 1, -1, 1)  # à or égal, plus de kills = défaite
+    match, timeline = fake_game([0] * 10 + [5000] * 10)
+    tp = analyze_match(fit_curve_model(df), match, timeline, puuid="b1")["turning_points"][0]
+    assert "contributions" not in tp
+
+
+def test_turning_point_lists_the_gaps_that_moved_from_the_player_side():
+    model = fit_curve_model(training_frame())
+    baron = {10: [{"type": "ELITE_MONSTER_KILL", "killerTeamId": 100, "monsterType": "BARON_NASHOR",
+                   "timestamp": 590_000}]}
+    match, timeline = fake_game([0] * 10 + [5000] * 10, events_by_minute=baron)
+    blue = analyze_match(model, match, timeline, puuid="b1")["turning_points"][0]
+    assert blue["ecarts"] == {"or": 5000, "XP": 5000, "Nashor": 1}
+    red = analyze_match(model, match, timeline, puuid="r1")["turning_points"][0]
+    assert red["ecarts"] == {"or": -5000, "XP": -5000, "Nashor": -1}
+
+
+def test_format_gaps_shows_signed_values_in_a_stable_order():
+    from src.winprob import format_gaps
+
+    assert format_gaps({"or": 2150, "kills": -1}) == "or +2150, kills -1"
+    assert format_gaps({}) == ""
+
+
+def test_moment_label_tells_how_many_events_the_chart_leaves_out():
+    from src.winprob import NO_EVENT, moment_label
+
+    assert moment_label({"events": ["Sivir tue Draven", "Udyr tue Katarina", "Udyr tue Shaco"]}) \
+        == "Sivir tue Draven, +2 autres"
+    assert moment_label({"events": ["Sivir tue Draven"]}) == "Sivir tue Draven"
+    assert moment_label({"events": []}) == NO_EVENT
 
 
 # ----------------------------------------------------------------------------- nouvelles parties
