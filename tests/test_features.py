@@ -100,6 +100,66 @@ def test_monster_without_a_playing_team_counts_for_nobody():
     assert build_rows(_match(True), timeline, minutes=(3,))[0]["dragons_diff"] == -1
 
 
+def _state_at_minute_5(events):
+    frames = [_frame(i, 500, 500) for i in range(4)] + [_frame(4, 500, 500, events), _frame(5, 1200, 1000)]
+    return build_rows(_match(True), {"info": {"frames": frames}}, minutes=(5,))[0]
+
+
+def test_inhibitors_count_for_the_team_that_destroys_them():
+    r = _state_at_minute_5([
+        {"type": "BUILDING_KILL", "timestamp": 200_000, "teamId": 200, "buildingType": "INHIBITOR_BUILDING"},
+        {"type": "BUILDING_KILL", "timestamp": 210_000, "teamId": 200, "buildingType": "INHIBITOR_BUILDING"},
+        {"type": "BUILDING_KILL", "timestamp": 220_000, "teamId": 100, "buildingType": "INHIBITOR_BUILDING"},
+    ])
+    assert r["inhibitors_diff"] == 2 - 1
+    assert r["towers_diff"] == 0  # un inhibiteur n'est pas une tour
+
+
+def test_elder_dragon_counts_apart_and_as_a_dragon():
+    r = _state_at_minute_5([
+        {"type": "ELITE_MONSTER_KILL", "timestamp": 200_000, "killerTeamId": 200, "monsterType": "DRAGON",
+         "monsterSubType": "ELDER_DRAGON"},
+        {"type": "ELITE_MONSTER_KILL", "timestamp": 210_000, "killerTeamId": 100, "monsterType": "DRAGON",
+         "monsterSubType": "FIRE_DRAGON"},
+    ])
+    assert r["elders_diff"] == -1
+    assert r["dragons_diff"] == 0
+
+
+def test_dragon_soul_accepts_both_spellings_of_the_team_field():
+    assert _state_at_minute_5([{"type": "DRAGON_SOUL_GIVEN", "timestamp": 200_000, "teamId": 100,
+                                "name": "Mountain"}])["souls_diff"] == 1
+    assert _state_at_minute_5([{"type": "DRAGON_SOUL_GIVEN", "timestamp": 200_000, "killerTeamId": 200,
+                                "name": "Ocean"}])["souls_diff"] == -1
+
+
+def test_atakhan_is_counted():
+    r = _state_at_minute_5([{"type": "ELITE_MONSTER_KILL", "timestamp": 200_000, "killerTeamId": 100,
+                             "monsterType": "ATAKHAN"}])
+    assert r["atakhans_diff"] == 1
+
+
+def test_recent_kills_only_count_the_last_two_minutes():
+    r = _state_at_minute_5([
+        {"type": "CHAMPION_KILL", "timestamp": 100_000, "killerId": 1},  # il y a 3 min 20 : trop ancien
+        {"type": "CHAMPION_KILL", "timestamp": 240_000, "killerId": 2},
+        {"type": "CHAMPION_KILL", "timestamp": 250_000, "killerId": 3},
+        {"type": "CHAMPION_KILL", "timestamp": 260_000, "killerId": 7},
+    ])
+    assert r["kills_diff"] == 3 - 1
+    assert r["recent_kills_diff"] == 2 - 1
+
+
+def test_gold_share_measures_the_lead_relative_to_all_the_gold_in_the_game():
+    r = _state_at_minute_5([])
+    assert r["gold_share_diff"] == (6000 - 5000) / (6000 + 5000)
+
+
+def test_gold_share_does_not_divide_by_zero():
+    frames = [_frame(i, 0, 0) for i in range(6)]
+    assert build_rows(_match(True), {"info": {"frames": frames}}, minutes=(5,))[0]["gold_share_diff"] == 0
+
+
 def test_skips_remakes_only():
     timeline = {"info": {"frames": [_frame(i, 500, 500) for i in range(6)]}}
     match = _match(True)

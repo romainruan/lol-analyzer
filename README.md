@@ -145,8 +145,35 @@ avec `--patch-holdout`, l'AUC de chaque patch mis de côté (entraînement sur l
 annoncée au taux de victoire réel, hors échantillon, et écrit `results/curve_calibration.csv`. L'AUC dit si
 le modèle classe bien les parties ; seule la calibration dit si « 62 % » veut vraiment dire 62 %.
 
-Chaque moment clé indique aussi `contributions` : les points du saut répartis entre `ressources` (or, XP,
-niveaux, CS), `combats`, `objectifs` et `vision`. C'est ce qui a fait bouger la prédiction, pas une cause.
+Chaque moment clé indique ses `ecarts` : ce qui a réellement bougé sur la minute (or, XP, CS, kills, objectifs),
+vu de votre équipe. Ce sont des faits de la partie, sans aucun modèle.
+
+**Choisir le modèle.** Trois types de modèle et deux jeux de variables sont disponibles (`train --kind` et
+`--features`). `lineaire` reste le choix par défaut, car c'est lui qui est mesuré plus haut :
+
+| `--kind` | Poids de chaque variable | Intérêt |
+|---|---|---|
+| `lineaire` | évolue en ligne droite avec la minute | référence |
+| `phases` | un poids à 5, 10, 15, 25 et 40 minutes, interpolé entre eux | le début de partie n'hérite pas de la tendance de la fin |
+| `monotone` | comme `phases`, sans poids négatif | un avantage ne fait jamais baisser la probabilité |
+
+`--features etendu` ajoute les inhibiteurs, le Dragon Ancien, l'âme de dragon, Atakhan, les kills des 2 dernières
+minutes et la part de l'or total : reconstruisez le jeu de données avec `build_dataset` pour en disposer.
+
+```bash
+python -m src.winprob compare --data data/dataset_all.csv --time-split 0.2  # compare tous ces modèles
+python -m src.winprob learning-curve --data data/dataset_all.csv            # faut-il collecter plus de parties ?
+```
+
+`compare` donne, au global et par phase de jeu, l'AUC, la log-loss, l'écart de calibration et le gain de log-loss
+sur le modèle `lineaire`. Ce gain est mesuré sur les mêmes lignes, avec un intervalle à 95 % rééchantillonné par
+partie : si l'intervalle contient 0, rien ne sépare les deux modèles.
+
+**Part de chaque famille.** Avec un modèle sans poids négatif (`monotone`), chaque moment clé indique aussi
+`contributions` : les points du saut répartis entre `ressources`, `combats`, `objectifs` et `vision`. Avec une
+régression libre, cette répartition n'est pas affichée. Kills et Nashor y reçoivent en effet des poids négatifs, car
+ils sont très corrélés à l'or : sur le modèle archivé dans l'historique du dépôt, prendre Nashor s'afficherait comme
+« objectifs -8 points ». La répartition dit ce qui a fait bouger la prédiction, pas ce qui a causé la victoire.
 
 Un seul modèle (régression logistique) sert pour toutes les minutes : le poids de
 chaque variable évolue avec le temps. Pour chaque partie analysée, `results/curves/`

@@ -9,6 +9,7 @@ from __future__ import annotations
 BLUE, RED = 100, 200
 DEFAULT_MINUTES = (5, 10, 15, 20, 25)
 FRAME_TOLERANCE_MS = 5000
+RECENT_KILLS_MS = 120_000  # les kills des 2 dernières minutes : joueurs morts, objectif à portée
 
 # teamPosition (match-v5) -> préfixe de colonne
 ROLES = {"TOP": "top", "JUNGLE": "jng", "MIDDLE": "mid", "BOTTOM": "bot", "UTILITY": "sup"}
@@ -71,8 +72,10 @@ def build_rows(match: dict, timeline: dict, minutes=DEFAULT_MINUTES) -> list[dic
 
         # --- état des deux équipes à la minute m (différences bleu - rouge)
         diff = {"gold": 0, "xp": 0, "level": 0, "cs": 0}
+        total_gold = 0
         for pid, pf in frames[m]["participantFrames"].items():
             s = _sign(team_of(int(pid)))
+            total_gold += pf["totalGold"]
             diff["gold"] += s * pf["totalGold"]
             diff["xp"] += s * pf["xp"]
             diff["level"] += s * pf["level"]
@@ -94,14 +97,23 @@ def build_rows(match: dict, timeline: dict, minutes=DEFAULT_MINUTES) -> list[dic
 
         # --- événements jusqu'à la minute m
         kills = towers = dragons = heralds = grubs = barons = wards = 0
+        inhibitors = elders = souls = atakhans = recent_kills = 0
         for e in events:
             if e["timestamp"] > cutoff:
                 continue
             t = e["type"]
             if t == "CHAMPION_KILL" and e.get("killerId", 0) > 0:
                 kills += _sign(team_of(e["killerId"]))
+                if e["timestamp"] > cutoff - RECENT_KILLS_MS:
+                    recent_kills += _sign(team_of(e["killerId"]))
             elif t == "BUILDING_KILL" and e.get("buildingType") == "TOWER_BUILDING":
                 towers += _sign(RED if e["teamId"] == BLUE else BLUE)  # équipe qui détruit
+            elif t == "BUILDING_KILL" and e.get("buildingType") == "INHIBITOR_BUILDING":
+                inhibitors += _sign(RED if e["teamId"] == BLUE else BLUE)  # équipe qui détruit
+            elif t == "DRAGON_SOUL_GIVEN":
+                team = e.get("teamId", e.get("killerTeamId"))
+                if team in (BLUE, RED):
+                    souls += _sign(team)
             elif t == "ELITE_MONSTER_KILL":
                 team = e.get("killerTeamId")
                 if team not in (BLUE, RED):  # monstre tué sans équipe en jeu
@@ -110,6 +122,10 @@ def build_rows(match: dict, timeline: dict, minutes=DEFAULT_MINUTES) -> list[dic
                 kind = e.get("monsterType")
                 if kind == "DRAGON":
                     dragons += s
+                    if e.get("monsterSubType") == "ELDER_DRAGON":
+                        elders += s
+                elif kind == "ATAKHAN":
+                    atakhans += s
                 elif kind == "RIFTHERALD":
                     heralds += s
                 elif kind == "HORDE":
@@ -136,6 +152,12 @@ def build_rows(match: dict, timeline: dict, minutes=DEFAULT_MINUTES) -> list[dic
                 "grubs_diff": grubs,
                 "barons_diff": barons,
                 "wards_diff": wards,
+                "inhibitors_diff": inhibitors,
+                "elders_diff": elders,
+                "souls_diff": souls,
+                "atakhans_diff": atakhans,
+                "recent_kills_diff": recent_kills,
+                "gold_share_diff": diff["gold"] / total_gold if total_gold else 0,
                 **lane,
                 "blue_win": blue_win,
             }

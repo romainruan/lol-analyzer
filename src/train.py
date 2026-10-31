@@ -31,6 +31,10 @@ BASE_FEATURES = [
     "gold_diff", "xp_diff", "level_diff", "cs_diff", "kills_diff", "towers_diff",
     "dragons_diff", "heralds_diff", "grubs_diff", "barons_diff", "wards_diff",
 ]
+# variables en plus, à évaluer avec `winprob compare` avant d'en faire le choix par défaut
+EXTENDED_FEATURES = BASE_FEATURES + [
+    "inhibitors_diff", "elders_diff", "souls_diff", "atakhans_diff", "recent_kills_diff", "gold_share_diff",
+]
 LANE_FEATURES = [f for f in BASE_FEATURES if f != "gold_diff"] + [
     "top_gold_diff", "jng_gold_diff", "mid_gold_diff", "bot_gold_diff", "sup_gold_diff",
     "mid_cs_diff",
@@ -59,6 +63,13 @@ def make_models() -> dict[str, tuple[list[str], Pipeline]]:
         "gbm_base": (BASE_FEATURES, gbm),
         "logreg_lanes": (LANE_FEATURES, logreg()),
     }
+
+
+def load_dataset(path: str | Path) -> pd.DataFrame:
+    if not Path(path).exists():
+        raise SystemExit(f"{path} introuvable : lancez d'abord `python -m src.build_dataset`.")
+    # patch en texte : relu comme un nombre, 16.1 et 16.10 seraient confondus
+    return pd.read_csv(path, dtype={"patch": str})
 
 
 def prepare(df: pd.DataFrame) -> pd.DataFrame:
@@ -185,7 +196,7 @@ def main() -> None:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    df = prepare(pd.read_csv(args.data))
+    df = prepare(load_dataset(args.data))
 
     metrics = evaluate(df, args.minutes, args.folds)
     if metrics.empty:
