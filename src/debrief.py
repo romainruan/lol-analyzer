@@ -1,4 +1,4 @@
-"""Débrief d'une partie rédigé par un LLM local (Ollama), version 5.2.
+"""Débrief d'une partie rédigé par un LLM local (Ollama), version 5.3.
 
 Principe : le code analyse, le modèle rédige.
   1. `build_facts` calcule les chiffres de la partie (stats, position parmi les mid
@@ -19,6 +19,7 @@ Principe : le code analyse, le modèle rédige.
     python -m src.debrief --match-id EUW1_123456    # une partie précise
     python -m src.debrief --limit 1 --dry-run       # affiche les phrases et le prompt, sans LLM
     python -m src.debrief --limit 3 --no-llm        # débrief sans LLM (gabarit), sert de référence
+    python -m src.debrief --recheck results/debriefs  # rejoue le contrôle sur des débriefs déjà écrits, sans LLM
 """
 from __future__ import annotations
 
@@ -33,7 +34,7 @@ import pandas as pd
 import requests
 
 from .benchmarks import STAT_COLS, build_benchmark, compare, mid_rows
-from .winprob import collapse_duplicates
+from .winprob import EARLY_MINUTE, collapse_duplicates, format_gaps
 
 DEFAULT_MODEL = "qwen2.5:7b"
 MIN_BENCH_ROWS = 50
@@ -132,6 +133,11 @@ _SPELLED_MINUTE = re.compile(
 _CHAMPION = re.compile(r"(\w+) \((?:alliés|ennemis|bleus|rouges)\)")
 _MINUTE_REF = re.compile(r"(?<!\d)(\d{1,2})\s*(?:e|ème|er|re)?\s+minutes?\b|\bminutes?\s+(\d{1,2})\b",
                          re.IGNORECASE)
+# un moment de la partie : « 30e minute », « la 30e », « minute 30 » (pas « 10 minutes », qui est une durée)
+_ORDINAL_MINUTE = re.compile(r"(?<![\d,.])(\d{1,2})\s*(?:e|ème|er|re)\b(?:\s+minutes?)?|\bminute\s+(\d{1,2})\b",
+                             re.IGNORECASE)
+# ce que le résumé du mode hybride a le droit de citer : le reste du brief ne lui est pas montré
+SUMMARY_FACTS = ("partie", "courbe", "variations_courbe")
 
 
 class OllamaError(RuntimeError):
@@ -238,6 +244,8 @@ def build_facts(
             "avant_pct": round(tp["win_prob_before"] * 100),
             "apres_pct": round(tp["win_prob_after"] * 100),
             "evenements": collapse_duplicates(tp["events"])[:4],
+            "ecarts": tp.get("ecarts", {}),  # absents des analyses produites par une ancienne version
+            "contributions": tp.get("contributions", {}),
         }
         for tp in analysis["turning_points"]
     ]
@@ -268,8 +276,16 @@ def _stat_sentence(name: str, d: dict) -> str:
 def _moment_sentence(m: dict) -> str:
     events = (" ; ".join(m["evenements"]) if m["evenements"]
               else "aucun événement majeur (l'écart d'or ou d'XP évolue)")
-    return (f"{m['minute']}e minute : la probabilité de victoire de l'équipe passe de "
-            f"{m['avant_pct']} % à {m['apres_pct']} %. Événements : {events}.")
+    sentence = (f"{m['minute']}e minute : la probabilité de victoire de l'équipe passe de "
+                f"{m['avant_pct']} % à {m['apres_pct']} %. Événements : {events}.")
+    if m.get("ecarts"):
+        sentence += f" Écarts sur la minute : {format_gaps(m['ecarts'])}."
+    shares = [f"{family} {_fr(points)} points" for family, points in m.get("contributions", {}).items() if points]
+    if shares:
+        sentence += f" Part du saut : {', '.join(shares)}."
+    if m["minute"] < EARLY_MINUTE:
+        sentence += " Début de partie : estimation peu fiable."
+    return sentence
 
 
 def build_brief(facts: dict) -> dict:
@@ -360,7 +376,7 @@ def build_messages(brief: dict) -> list[dict]:
 def build_summary_messages(brief: dict) -> list[dict]:
     """Mode hybride : le modèle ne voit que la partie et la forme de la courbe, sans événement
     ni nom de champion : il ne peut donc se tromper ni de cause ni de joueur."""
-    subset = {k: brief[k] for k in ("partie", "courbe", "variations_courbe") if k in brief}
+    subset = {k: brief[k] for k in SUMMARY_FACTS if k in brief}
     data = json.dumps(subset, ensure_ascii=False, indent=1)
     return [
         {"role": "system", "content": SUMMARY_PROMPT},
@@ -436,22 +452,26 @@ def _fmt_number(x: float) -> str:
 
 
 def check_text(text: str, brief: dict, *, require_moments: bool = True,
-               strict_names: bool = False) -> list[str]:
-    """Problèmes détectés automatiquement. Liste vide = rien à signaler (pas une preuve de justesse)."""
+               strict_names: bool = False, visible: dict | None = None) -> list[str]:
+    """Problèmes détectés automatiquement. Liste vide = rien à signaler (pas une preuve de justesse).
+
+    `visible` : les faits montrés au modèle, si ce n'est pas tout le brief. Un nombre présent ailleurs dans le
+    brief, qu'il n'a jamais vu, ne peut venir que d'une invention tombée juste."""
     issues: list[str] = []
-    unknown = check_numbers(text, brief)
+    shown = brief if visible is None else visible
+    unknown = check_numbers(text, shown)
     if unknown:
         issues.append("nombres absents des faits : " + ", ".join(_fmt_number(x) for x in unknown))
 
     # un nombre qui existe dans les faits, mais pas comme pourcentage, ne peut pas en devenir un
-    allowed_pct = _percents(_public_json(brief))
+    allowed_pct = _percents(_public_json(shown))
     misplaced = sorted(p for p in _percents(_strip_list_numbers(text))
                        if p not in allowed_pct and p not in unknown)
     if misplaced:
         issues.append("pourcentages absents des faits : " + ", ".join(_fmt_number(x) for x in misplaced))
 
     # « de A % à B % » doit reprendre un saut fourni tel quel, pas mélanger deux sauts
-    allowed_pairs = _transitions(_public_json(brief))
+    allowed_pairs = _transitions(_public_json(shown))
     wrong_pairs = sorted(t for t in _transitions(text) if t not in allowed_pairs)
     if wrong_pairs:
         issues.append("transitions absentes des faits : "
@@ -500,20 +520,35 @@ _END_WORDS = re.compile(r"\b(?:termin\w*|finit|finir|fini|finalement|à la fin)\
 _UNVERIFIABLE = ("jusqu'à la fin", "jusqu’à la fin", "restant bas", "restant haut", "reste bas",
                  "reste haut", "plus brusque", "plus brutal", "plus fortement", "plus rapidement",
                  "plus lentement", "plus nettement", "répétition", "maintenu", "maintenait",
-                 "maintient", "oscill")
+                 "maintient", "oscill",
+                 # relecture de la v5.2 : le résumé ne connaît que quelques minutes de la courbe,
+                 # il ne peut rien affirmer sur ce qui se passe entre deux d'entre elles
+                 "reste à", "resté à", "restée à", "restant à", "rester à", "restait à", "stabilis", "demeur")
+_UNTIL_MINUTE = re.compile(r"jusqu['’]à la \d+\w*", re.IGNORECASE)
 _CLAUSE_SPLIT = re.compile(r"[,;]|\s(?:puis|avant de|avant|mais)\s")
 _PCT_POS = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
 
 
-def _moment_pairs(brief: dict) -> set[tuple[int, int]]:
-    """(minute, pourcentage) connus grâce aux moments clés : la valeur avant et la valeur après."""
-    pairs = set()
+def _moment_jumps(brief: dict) -> dict[int, tuple[int, int]]:
+    """Pour chaque moment clé fourni : minute -> (valeur avant le saut, valeur après)."""
+    jumps = {}
     for sentence in brief.get("variations_courbe", []) + brief.get("moments_cles", []):
         m = re.match(r"(\d+)e minute : .*? de (\d+) % à (\d+) %", sentence)
         if m:
-            minute = int(m.group(1))
-            pairs |= {(minute, int(m.group(2))), (minute, int(m.group(3)))}
-    return pairs
+            jumps[int(m.group(1))] = (int(m.group(2)), int(m.group(3)))
+    return jumps
+
+
+def _known_values(jumps: dict[int, tuple[int, int]], ref: dict) -> set[tuple[int, int]]:
+    """(minute, pourcentage) que les faits établissent : un saut à la minute N va de la valeur de la minute
+    N-1 à celle de la minute N, et s'y ajoutent le départ, la fin, le maximum et le minimum."""
+    known = {(ref["premiere_minute"], ref["probabilite_depart_pct"]),
+             (ref["derniere_minute"], ref["probabilite_finale_pct"])}
+    known |= {(m, ref["plus_haut_pct"]) for m in ref["minutes_au_plus_haut"]}
+    known |= {(m, ref["plus_bas_pct"]) for m in ref["minutes_au_plus_bas"]}
+    for minute, (before, after) in jumps.items():
+        known |= {(minute - 1, before), (minute, after)}
+    return known
 
 
 def _nearest(sentence: str, pos: int, matches: list[tuple[int, float]], reach: int = 70):
@@ -550,9 +585,11 @@ def check_claims(text: str, brief: dict) -> list[str]:
     issues: list[str] = []
     lowered = text.lower()
     issues += [f"affirmation non vérifiable : « {w} »" for w in _UNVERIFIABLE if w in lowered]
+    issues += [f"affirmation non vérifiable : « {m.group(0)} »" for m in _UNTIL_MINUTE.finditer(text)]
     if not ref:
         return issues
-    pairs = _moment_pairs(brief)
+    jumps = _moment_jumps(brief)
+    known = _known_values(jumps, ref)
     for sentence in re.split(r"(?<=[.!?])\s+|\n+", text):
         percents = [(m.start(), float(m.group(1).replace(",", "."))) for m in _PCT_POS.finditer(sentence)]
         flagged = False
@@ -575,27 +612,27 @@ def check_claims(text: str, brief: dict) -> list[str]:
                         flagged = True
         if flagged:
             continue
-        # une valeur extrême associée à une minute doit être la bonne (ex. « 0 % à la 15e minute ») :
-        # on prend, pour chaque minute citée, le pourcentage le plus proche dans la même proposition
+        # « de A % à B % » doit être cité à la minute du saut
+        for t in _TRANSITION.finditer(sentence):
+            minute = _clause_minute(sentence, t.start())
+            pair = (round(float(t.group(1).replace(",", "."))), round(float(t.group(2).replace(",", "."))))
+            actual = [m for m, jump in jumps.items() if jump == pair]
+            if minute is not None and actual and minute not in actual:
+                issues.append(f"transition de {pair[0]} % à {pair[1]} % citée à la {minute}e minute : "
+                              f"les faits la placent à la {actual[0]}e")
+        # une valeur associée à une minute doit être celle que les faits y placent (ex. « 0 % à la 15e
+        # minute ») : pour chaque minute citée, le pourcentage le plus proche dans la même proposition
         for clause in _CLAUSE_SPLIT.split(sentence):
+            clause = _TRANSITION.sub("", clause)
             c_pcts = [(m.start(), float(m.group(1).replace(",", "."))) for m in _PCT_POS.finditer(clause)]
-            for m in _MINUTE_REF.finditer(clause):
+            for m in _ORDINAL_MINUTE.finditer(clause):
                 minute = int(m.group(1) or m.group(2))
                 near = [(abs(a - m.start()), v) for a, v in c_pcts if abs(a - m.start()) <= 40]
-                if not near:
-                    continue
-                value = min(near)[1]
-                kind = ("plus_bas_pct" if abs(value - ref["plus_bas_pct"]) <= 0.5 else
-                        "plus_haut_pct" if abs(value - ref["plus_haut_pct"]) <= 0.5 else None)
-                known = (kind is None
-                         or (minute, round(value)) in pairs
-                         or (kind == "plus_bas_pct" and minute in ref["minutes_au_plus_bas"])
-                         or (kind == "plus_haut_pct" and minute in ref["minutes_au_plus_haut"])
-                         or (minute == ref["premiere_minute"] and round(value) == ref["probabilite_depart_pct"])
-                         or (minute == ref["derniere_minute"] and round(value) == ref["probabilite_finale_pct"]))
-                if not known:
+                if near and (minute, round(min(near)[1])) not in known:
+                    value = min(near)[1]
+                    extreme = "extrême " if round(value) in (ref["plus_bas_pct"], ref["plus_haut_pct"]) else ""
                     issues.append(f"{_fmt_number(value)} % associé à la {minute}e minute : "
-                                  "valeur extrême que les faits ne placent pas là")
+                                  f"valeur {extreme}que les faits ne placent pas là")
     # une même minute ne peut pas porter deux valeurs (« 30 % à la 7e minute, 22 % à la 7e minute »)
     seen: dict[int, set[float]] = {}
     for clause in _CLAUSE_SPLIT.split(text):
@@ -651,7 +688,8 @@ def check_summary(text: str, brief: dict) -> list[str]:
     section, ni plus de 3 phrases, ni champion autre que celui du joueur."""
     if not text.strip():
         return ["résumé vide"]
-    issues = check_text(text, brief, require_moments=False, strict_names=True)
+    visible = {k: brief[k] for k in SUMMARY_FACTS if k in brief}
+    issues = check_text(text, brief, require_moments=False, strict_names=True, visible=visible)
     if re.search(r"(?m)^\s*(?:[-•*]|#|\d+[.)])\s|\*\*", text):
         issues.append("mise en forme interdite (liste, titre ou gras)")
     if re.search(r"points? forts?|axes? de progrès|tendance habituelle", text, re.IGNORECASE):
@@ -726,6 +764,41 @@ def append_review_rows(path: Path, rows: list[dict]) -> None:
         writer.writerows(existing)
 
 
+def recheck(folder: Path, review: Path | None = None) -> pd.DataFrame:
+    """Rejoue le contrôle du résumé sur des débriefs déjà écrits, sans LLM : le fichier contient le résumé et
+    les faits. Sert à mesurer un nouveau contrôle sur des résumés déjà relus à la main (colonne `erreurs_relues`).
+    Les gabarits, le mode `llm` et les résumés de repli sont ignorés : ce n'est pas un résumé du modèle."""
+    annotated: dict[tuple[str, str], int] = {}
+    if review is not None and review.exists():
+        with review.open(encoding="utf-8-sig", newline="") as f:
+            for row in csv.DictReader(f):
+                if row["erreurs_chiffres"] != "":
+                    annotated[row["match_id"], row["modele"]] = sum(
+                        int(row[c] or 0) for c in ("erreurs_chiffres", "inventions", "omissions"))
+    rows = []
+    for path in sorted(folder.glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        if path.stem.endswith(("_llm", "_gabarit")) or "Résumé du modèle refusé" in text:
+            continue
+        summary = text.split("**Résumé**\n", 1)[1].split("\n\n**Moments clés**", 1)[0].strip()
+        brief = json.loads(text.split("```json\n", 1)[1].split("\n```", 1)[0])
+        model = re.search(r"\*Modèle : (.*?)\. Vérification", text).group(1)
+        rows.append({"match_id": path.stem, "modele": model, "problemes": " ; ".join(check_summary(summary, brief)),
+                     "erreurs_relues": annotated.get((path.stem, model))})
+    return pd.DataFrame(rows, columns=["match_id", "modele", "problemes", "erreurs_relues"])
+
+
+def print_recheck(table: pd.DataFrame) -> None:
+    for r in table[table["problemes"] != ""].itertuples():
+        print(f"{r.match_id} ({r.modele}) : {r.problemes}")
+    flagged = table["problemes"] != ""
+    wrong = table["erreurs_relues"].notna() & (table["erreurs_relues"] > 0)
+    right = table["erreurs_relues"] == 0
+    print(f"\n{len(table)} résumés, {int(flagged.sum())} signalés par le contrôle.")
+    print(f"Relus à la main avec une erreur : {int((flagged & wrong).sum())} signalés sur {int(wrong.sum())}.")
+    print(f"Relus à la main sans erreur : {int((flagged & right).sum())} signalés sur {int(right.sum())}.")
+
+
 # ----------------------------------------------------------------------------- CLI
 def reviewed_ids(path: Path) -> set[str]:
     """Parties déjà présentes dans la fiche de relecture (quel que soit le mode)."""
@@ -762,8 +835,16 @@ def main() -> None:
                    help="hybrid : le modèle n'écrit que le résumé (défaut) ; llm : il écrit tout ; "
                         "template : sans modèle")
     p.add_argument("--no-llm", action="store_true", help="raccourci pour --mode template")
+    p.add_argument("--recheck", metavar="DOSSIER",
+                   help="rejoue le contrôle sur les débriefs déjà écrits de ce dossier, sans LLM, et s'arrête")
+    p.add_argument("--review", help="avec --recheck : fiche de relecture (défaut : review.csv du dossier)")
     args = p.parse_args()
     mode = "template" if args.no_llm else args.mode
+
+    if args.recheck:
+        folder = Path(args.recheck)
+        print_recheck(recheck(folder, Path(args.review) if args.review else folder / "review.csv"))
+        return
 
     raw_dir, curves_dir = Path(args.raw_dir), Path(args.curves)
     puuid_file = raw_dir / "puuid.txt"
@@ -787,7 +868,7 @@ def main() -> None:
         raise SystemExit(f"Aucune analyse dans {curves_dir} : lancez `python -m src.winprob analyze`.")
 
     out_dir = Path(args.out)
-    model_name = {"template": "gabarit (sans LLM)", "hybrid": f"{args.model} (hybride v5.2)",
+    model_name = {"template": "gabarit (sans LLM)", "hybrid": f"{args.model} (hybride v5.3)",
                   "llm": f"{args.model} (complet)"}[mode]
     review_rows = []
     for match_id in ids:
