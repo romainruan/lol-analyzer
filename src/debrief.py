@@ -103,8 +103,12 @@ League of Legends : 2 ou 3 phrases, en français, sans liste, sans titre, sans m
 
 Règles strictes :
 - Raconte uniquement l'évolution de la probabilité de victoire de l'ÉQUIPE : le départ, les \
-variations aux minutes indiquées, les valeurs extrêmes. Cette probabilité est celle de \
-l'équipe, jamais celle du joueur.
+variations aux minutes indiquées, le maximum et le minimum avec leur minute, la valeur à la \
+dernière minute de la courbe. Cette probabilité est celle de l'équipe, jamais celle du joueur.
+- Les mots « maximum », « pic », « minimum », « le plus bas » et « fin » ne s'emploient que \
+pour les valeurs et les minutes que les FAITS désignent ainsi. Une variation citée n'est \
+pas un maximum ou un minimum. Ne compare pas les variations entre elles (pas de « plus \
+brusque »), et n'écris rien sur ce qui se passe entre deux minutes citées.
 - Recopie les nombres tels quels. Écris les minutes en chiffres (« 4e minute »), jamais en \
 lettres. Ne calcule rien : pas de différence, pas de moyenne.
 - Tu ne connais ni les événements, ni les causes, ni les autres joueurs : n'en mentionne \
@@ -126,7 +130,7 @@ _SPELLED_MINUTE = re.compile(
     r"|dix\w*|onz\w*|douz\w*|treiz\w*|quinz\w*|seiz\w*|vingt\w*|trent\w*|quarant\w*)"
     r"(?:-\w+)*\s+minutes?\b", re.IGNORECASE)
 _CHAMPION = re.compile(r"(\w+) \((?:alliés|ennemis|bleus|rouges)\)")
-_MINUTE_REF = re.compile(r"(?<!\d)(\d{1,2})\s*(?:e|ème|er)?\s+minutes?\b|\bminutes?\s+(\d{1,2})\b",
+_MINUTE_REF = re.compile(r"(?<!\d)(\d{1,2})\s*(?:e|ème|er|re)?\s+minutes?\b|\bminutes?\s+(\d{1,2})\b",
                          re.IGNORECASE)
 
 
@@ -213,10 +217,20 @@ def build_facts(
 
     probs = [c["win_prob"] for c in analysis["curve"]]
     if probs:
+        minutes_curve = [c["minute"] for c in analysis["curve"]]
+        pcts = [round(p * 100) for p in probs]
         facts["courbe"] = {
-            "probabilite_depart_pct": round(probs[0] * 100),
-            "plus_haut_pct": round(max(probs) * 100),
-            "plus_bas_pct": round(min(probs) * 100),
+            "probabilite_depart_pct": pcts[0],
+            "plus_haut_pct": max(pcts),
+            "minute_plus_haut": minutes_curve[probs.index(max(probs))],
+            "plus_bas_pct": min(pcts),
+            "minute_plus_bas": minutes_curve[probs.index(min(probs))],
+            "probabilite_finale_pct": pcts[-1],
+            "derniere_minute": minutes_curve[-1],
+            # toutes les minutes qui affichent la même valeur arrondie : le texte peut citer l'une d'elles
+            "minutes_au_plus_haut": [m for m, v in zip(minutes_curve, pcts) if v == max(pcts)],
+            "minutes_au_plus_bas": [m for m, v in zip(minutes_curve, pcts) if v == min(pcts)],
+            "premiere_minute": minutes_curve[0],
         }
     facts["moments_cles"] = [
         {
@@ -231,6 +245,10 @@ def build_facts(
 
 
 # ----------------------------------------------------------------------------- phrases
+def _ordinal(minute: int) -> str:
+    return "1re" if minute == 1 else f"{minute}e"
+
+
 def _fr(x: float | int) -> str:
     return str(x).replace(".", ",")
 
@@ -263,9 +281,17 @@ def build_brief(facts: dict) -> dict:
     }
     c = facts.get("courbe")
     if c:
-        brief["courbe"] = (f"La probabilité de victoire de l'équipe est partie de "
-                           f"{c['probabilite_depart_pct']} % et a varié entre "
-                           f"{c['plus_bas_pct']} % et {c['plus_haut_pct']} %.")
+        brief["courbe"] = (
+            f"La probabilité de victoire de l'équipe est partie de {c['probabilite_depart_pct']} % "
+            f"et a varié entre {c['plus_bas_pct']} % et {c['plus_haut_pct']} %. "
+            f"Son maximum ({c['plus_haut_pct']} %) est à la {_ordinal(c['minute_plus_haut'])} minute, "
+            f"son minimum ({c['plus_bas_pct']} %) à la {_ordinal(c['minute_plus_bas'])} minute, "
+            f"et elle est à {c['probabilite_finale_pct']} % à la dernière minute de la courbe "
+            f"({_ordinal(c['derniere_minute'])}).")
+        # valeurs de référence pour le contrôle ; jamais montrées au modèle (clé commençant par « _ »)
+        brief["_courbe"] = {k: c[k] for k in (
+            "probabilite_depart_pct", "plus_haut_pct", "plus_bas_pct", "probabilite_finale_pct",
+            "derniere_minute", "premiere_minute", "minutes_au_plus_haut", "minutes_au_plus_bas")}
     brief["moments_cles"] = [_moment_sentence(m) for m in facts["moments_cles"]]
     # la forme de la courbe sans aucun événement : c'est tout ce que le modèle voit en mode hybride
     brief["variations_courbe"] = [
@@ -322,7 +348,8 @@ def render_template(brief: dict, summary: str | None = None) -> str:
 
 # ----------------------------------------------------------------------------- LLM
 def build_messages(brief: dict) -> list[dict]:
-    data = json.dumps({k: v for k, v in brief.items() if k != "variations_courbe"},
+    data = json.dumps({k: v for k, v in brief.items()
+                       if k != "variations_courbe" and not k.startswith("_")},
                       ensure_ascii=False, indent=1)
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -389,9 +416,14 @@ def _strip_list_numbers(text: str) -> str:
     return re.sub(r"(?m)^\s*\d+[.)]\s+", "", text)  # numérotation éventuelle des listes
 
 
+def _public_json(brief: dict) -> str:
+    """Le brief tel que le modèle le voit : sans les valeurs de contrôle (clés « _... »)."""
+    return json.dumps({k: v for k, v in brief.items() if not k.startswith("_")}, ensure_ascii=False)
+
+
 def check_numbers(text: str, facts: dict) -> list[float]:
     """Nombres du texte absents des faits (à un arrondi près). Liste vide = rien d'inventé."""
-    allowed = _numbers(json.dumps(facts, ensure_ascii=False))
+    allowed = _numbers(_public_json(facts))
     unknown = []
     for x in _numbers(_strip_list_numbers(text)):
         if not any(abs(x - a) < 0.051 or (x == int(x) and abs(x - a) <= 0.5) for a in allowed):
@@ -412,14 +444,14 @@ def check_text(text: str, brief: dict, *, require_moments: bool = True,
         issues.append("nombres absents des faits : " + ", ".join(_fmt_number(x) for x in unknown))
 
     # un nombre qui existe dans les faits, mais pas comme pourcentage, ne peut pas en devenir un
-    allowed_pct = _percents(json.dumps(brief, ensure_ascii=False))
+    allowed_pct = _percents(_public_json(brief))
     misplaced = sorted(p for p in _percents(_strip_list_numbers(text))
                        if p not in allowed_pct and p not in unknown)
     if misplaced:
         issues.append("pourcentages absents des faits : " + ", ".join(_fmt_number(x) for x in misplaced))
 
     # « de A % à B % » doit reprendre un saut fourni tel quel, pas mélanger deux sauts
-    allowed_pairs = _transitions(json.dumps(brief, ensure_ascii=False))
+    allowed_pairs = _transitions(_public_json(brief))
     wrong_pairs = sorted(t for t in _transitions(text) if t not in allowed_pairs)
     if wrong_pairs:
         issues.append("transitions absentes des faits : "
@@ -453,7 +485,131 @@ def check_text(text: str, brief: dict, *, require_moments: bool = True,
     if english:
         issues.append("mot anglais : " + ", ".join(english))
     issues.extend(check_names(text, brief, strict_names))
+    issues.extend(check_claims(text, brief))
     return issues
+
+
+# ----------------------------------------------------------------------------- affirmations
+# Le contrôle des nombres ne voit pas qu'un « pic à 92 % » est faux si 92 % existe ailleurs dans
+# les faits. Ici on vérifie les mots « maximum / minimum / fin » contre les vraies valeurs.
+_MAX_WORDS = re.compile(r"\b(?:maximum|pic|(?:le|son|sa)\s+plus\s+haut|plus haut niveau|sommet|culmin\w*"
+                        r"|apogée|point haut)\b", re.I)
+_MIN_WORDS = re.compile(r"\b(?:minimum|(?:le|son|sa)\s+plus\s+bas|plus bas niveau|point bas|creux)\b",
+                        re.I)
+_END_WORDS = re.compile(r"\b(?:termin\w*|finit|finir|fini|finalement|à la fin)\b", re.I)
+_UNVERIFIABLE = ("jusqu'à la fin", "jusqu’à la fin", "restant bas", "restant haut", "reste bas",
+                 "reste haut", "plus brusque", "plus brutal", "plus fortement", "plus rapidement",
+                 "plus lentement", "plus nettement", "répétition", "maintenu", "maintenait",
+                 "maintient", "oscill")
+_CLAUSE_SPLIT = re.compile(r"[,;]|\s(?:puis|avant de|avant|mais)\s")
+_PCT_POS = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
+
+
+def _moment_pairs(brief: dict) -> set[tuple[int, int]]:
+    """(minute, pourcentage) connus grâce aux moments clés : la valeur avant et la valeur après."""
+    pairs = set()
+    for sentence in brief.get("variations_courbe", []) + brief.get("moments_cles", []):
+        m = re.match(r"(\d+)e minute : .*? de (\d+) % à (\d+) %", sentence)
+        if m:
+            minute = int(m.group(1))
+            pairs |= {(minute, int(m.group(2))), (minute, int(m.group(3)))}
+    return pairs
+
+
+def _nearest(sentence: str, pos: int, matches: list[tuple[int, float]], reach: int = 70):
+    """Valeur la plus proche de `pos` : d'abord celles qui suivent, sinon celles qui précèdent."""
+    after = [(a - pos, v) for a, v in matches if a >= pos and a - pos <= reach]
+    if after:
+        return min(after)[1]
+    before = [(pos - a, v) for a, v in matches if a < pos and pos - a <= reach]
+    return min(before)[1] if before else None
+
+
+def _clause_minute(sentence: str, pos: int) -> int | None:
+    """Minute citée dans la même proposition que le mot en `pos`. À défaut, celle de la proposition
+    précédente, si elle ne contient qu'une minute (« À la 15e minute, elle atteint son pic... »)."""
+    start = 0
+    previous = ""
+    for sep in _CLAUSE_SPLIT.finditer(sentence):
+        if sep.start() >= pos:
+            break
+        previous, start = sentence[start:sep.start()], sep.end()
+    end = _CLAUSE_SPLIT.search(sentence, pos)
+    clause = sentence[start:end.start() if end else len(sentence)]
+    found = _MINUTE_REF.findall(clause)
+    if not found and not _PCT_POS.search(previous) and re.match(r"\s*(?:à|en)\s+la\s+\d", previous, re.I):
+        found = _MINUTE_REF.findall(previous)
+    if not found:
+        return None
+    a, b = found[0]
+    return int(a or b)
+
+
+def check_claims(text: str, brief: dict) -> list[str]:
+    ref = brief.get("_courbe")
+    issues: list[str] = []
+    lowered = text.lower()
+    issues += [f"affirmation non vérifiable : « {w} »" for w in _UNVERIFIABLE if w in lowered]
+    if not ref:
+        return issues
+    pairs = _moment_pairs(brief)
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text):
+        percents = [(m.start(), float(m.group(1).replace(",", "."))) for m in _PCT_POS.finditer(sentence)]
+        minutes = [(m.start(), int(m.group(1) or m.group(2))) for m in _MINUTE_REF.finditer(sentence)]
+        flagged = False
+        for words, label, agree, value_key, minutes_key in (
+                (_MAX_WORDS, "maximum", "annoncé", "plus_haut_pct", "minutes_au_plus_haut"),
+                (_MIN_WORDS, "minimum", "annoncé", "plus_bas_pct", "minutes_au_plus_bas"),
+                (_END_WORDS, "valeur finale", "annoncée", "probabilite_finale_pct", None)):
+            pronoun = "il" if label != "valeur finale" else "elle"
+            for w in words.finditer(sentence):
+                pct = _nearest(sentence, w.end(), percents)
+                if pct is not None and abs(pct - ref[value_key]) > 0.5:
+                    issues.append(f"{label} {agree} à {_fmt_number(pct)} % alors qu'{pronoun} est à "
+                                  f"{ref[value_key]} %")
+                    flagged = True
+                if minutes_key:
+                    minute = _clause_minute(sentence, w.start())
+                    if minute is not None and minute not in ref[minutes_key]:
+                        issues.append(f"{label} situé à la {minute}e minute alors qu'il est à la "
+                                      f"{ref[minutes_key][0]}e")
+                        flagged = True
+        if flagged:
+            continue
+        # une valeur extrême associée à une minute doit être la bonne (ex. « 0 % à la 15e minute ») :
+        # on prend, pour chaque minute citée, le pourcentage le plus proche dans la même proposition
+        for clause in _CLAUSE_SPLIT.split(sentence):
+            c_pcts = [(m.start(), float(m.group(1).replace(",", "."))) for m in _PCT_POS.finditer(clause)]
+            for m in _MINUTE_REF.finditer(clause):
+                minute = int(m.group(1) or m.group(2))
+                near = [(abs(a - m.start()), v) for a, v in c_pcts if abs(a - m.start()) <= 40]
+                if not near:
+                    continue
+                value = min(near)[1]
+                kind = ("plus_bas_pct" if abs(value - ref["plus_bas_pct"]) <= 0.5 else
+                        "plus_haut_pct" if abs(value - ref["plus_haut_pct"]) <= 0.5 else None)
+                known = (kind is None
+                         or (minute, round(value)) in pairs
+                         or (kind == "plus_bas_pct" and minute in ref["minutes_au_plus_bas"])
+                         or (kind == "plus_haut_pct" and minute in ref["minutes_au_plus_haut"])
+                         or (minute == ref["premiere_minute"] and round(value) == ref["probabilite_depart_pct"])
+                         or (minute == ref["derniere_minute"] and round(value) == ref["probabilite_finale_pct"]))
+                if not known:
+                    issues.append(f"{_fmt_number(value)} % associé à la {minute}e minute : "
+                                  "valeur extrême que les faits ne placent pas là")
+    # une même minute ne peut pas porter deux valeurs (« 30 % à la 7e minute, 22 % à la 7e minute »)
+    seen: dict[int, set[float]] = {}
+    for clause in _CLAUSE_SPLIT.split(text):
+        c_pcts = [(m.start(), float(m.group(1).replace(",", "."))) for m in _PCT_POS.finditer(clause)]
+        for m in _MINUTE_REF.finditer(clause):
+            near = [(abs(a - m.start()), v) for a, v in c_pcts if abs(a - m.start()) <= 40]
+            if near:
+                seen.setdefault(int(m.group(1) or m.group(2)), set()).add(min(near)[1])
+    for minute, values in sorted(seen.items()):
+        if len(values) > 1:
+            issues.append(f"la {minute}e minute est citée avec deux valeurs : "
+                          + " et ".join(f"{_fmt_number(v)} %" for v in sorted(values, reverse=True)))
+    return list(dict.fromkeys(issues))
 
 
 def _moment_names(brief: dict) -> dict[int, set[str]]:
@@ -618,7 +774,7 @@ def main() -> None:
         raise SystemExit(f"Aucune analyse dans {curves_dir} : lancez `python -m src.winprob analyze`.")
 
     out_dir = Path(args.out)
-    model_name = {"template": "gabarit (sans LLM)", "hybrid": f"{args.model} (hybride v4)",
+    model_name = {"template": "gabarit (sans LLM)", "hybrid": f"{args.model} (hybride v5.2)",
                   "llm": f"{args.model} (complet)"}[mode]
     review_rows = []
     for match_id in ids:

@@ -127,6 +127,19 @@ d'échec il reçoit la liste de ses erreurs et un autre tirage (graine différen
 3 tentatives (`--attempts`). Si aucune ne passe, le résumé écrit par le code le remplace
 et la fiche de relecture le signale.
 
+**Version 5 (maximum, minimum, valeur finale).** La relecture manuelle de 12 parties avait
+montré que 8 résumés hybrides sur 11 (version 4) contenaient une erreur invisible au contrôle
+automatique : le modèle ne connaissait ni la minute du maximum et du minimum, ni la valeur
+finale, et les devinait (« pic à 92 % » alors que le maximum était 99 %). La phrase de courbe
+indique maintenant le maximum, le minimum et la valeur finale avec leur minute, et un contrôle
+compare chaque « maximum », « pic », « minimum », « le plus bas », « fini à » aux vraies
+valeurs, refuse un 0 % ou un 99 % placé à la mauvaise minute, et refuse les affirmations
+invérifiables (« jusqu'à la fin », « plus brusquement »). Mesure « avant » : voir
+`results/debriefs/review.csv` (lignes `hybride v4`) ; première mesure « après » : lignes `hybride v5` (3 résumés sur 12 avec erreur, contre 8 sur 11).
+Les versions 5.1 et 5.2 ajoutent des contrôles écrits à partir de ces erreurs (« son plus bas
+niveau », « (répétition) », « s'est maintenue », une même minute citée avec deux valeurs) : comme elles sont réglées sur les mêmes 12 parties, son
+score est optimiste ; il faut la mesurer sur des parties nouvelles.
+
 **Contrôle automatique** : nombres absents des faits, pourcentages qui n'existent pas
 comme pourcentages, transitions « de A % à B % » qui mélangent deux sauts, moments clés
 omis, champions cités à la mauvaise minute, minutes écrites en lettres, mots anglais,
@@ -135,7 +148,7 @@ sans données, résumé de plus de 3 phrases. Il ne vérifie ni le sens des phra
 tué qui : relisez chaque débrief.
 
 **Mesure de fidélité.** Chaque exécution met à jour `results/debriefs/review.csv` (une
-ligne par débrief et par mode, le mode hybride étant étiqueté `hybride v4`). Remplissez à
+ligne par débrief et par mode, le mode hybride étant étiqueté `hybride v5.2`). Remplissez à
 la main `erreurs_chiffres`, `inventions` et `omissions` : vos annotations sont conservées
 quand vous relancez. Le nombre d'erreurs par débrief permet de comparer les modes et les
 modèles (`--model llama3.1:8b`). Fermez le fichier dans Excel avant de relancer.

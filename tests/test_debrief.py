@@ -16,6 +16,7 @@ from src.debrief import (
     build_messages,
     build_summary_messages,
     chat,
+    check_claims,
     check_names,
     check_numbers,
     check_summary,
@@ -104,8 +105,11 @@ def test_facts_collapse_repeated_events_and_round_probabilities():
     assert moment["evenements"] == ["Les alliés prennent des Larves du Néant (×3)",
                                     "Les ennemis prennent le Dragon"]
     assert (moment["avant_pct"], moment["apres_pct"]) == (54, 44)
-    assert facts["courbe"] == {"probabilite_depart_pct": 50, "plus_haut_pct": 80,
-                               "plus_bas_pct": 44}
+    assert facts["courbe"] == {
+        "probabilite_depart_pct": 50, "plus_haut_pct": 80, "minute_plus_haut": 20,
+        "plus_bas_pct": 44, "minute_plus_bas": 10, "probabilite_finale_pct": 80,
+        "derniere_minute": 20, "minutes_au_plus_haut": [20], "minutes_au_plus_bas": [10],
+        "premiere_minute": 2}
 
 
 def test_facts_for_another_role_have_no_mid_comparison():
@@ -130,7 +134,11 @@ def test_brief_moment_sentence_is_ready_to_copy():
         "Événements : Les alliés prennent des Larves du Néant (×3) ; Les ennemis prennent le Dragon."
     ]
     assert brief["partie"] == "Ahri (mid), victoire en 30 minutes, score 6/2/6 (kills/morts/assistances)."
-    assert brief["courbe"].endswith("a varié entre 44 % et 80 %.")
+    assert brief["courbe"] == (
+        "La probabilité de victoire de l'équipe est partie de 50 % et a varié entre 44 % et 80 %. "
+        "Son maximum (80 %) est à la 20e minute, son minimum (44 %) à la 10e minute, "
+        "et elle est à 80 % à la dernière minute de la courbe (20e).")
+    assert "_courbe" in brief
 
 
 def test_brief_judgements_come_from_thresholds_and_advice_from_rules():
@@ -464,3 +472,111 @@ def test_chat_sends_the_requested_seed_and_markdown_shows_the_summary_note():
     md = render_markdown("EUW1_3", mid_brief(), "Texte.", [], "qwen2.5:7b (hybride v4)",
                          note="Résumé du modèle accepté à la tentative 2 sur 3.")
     assert "accepté à la tentative 2 sur 3." in md
+
+
+# ----------------------------------------------------------------------------- v5
+def v5_brief():
+    """Faits d'une partie réelle (EUW1_8015593577) : départ 45 %, maximum 99 % à la 27e minute."""
+    return {
+        "partie": "Ahri (mid), victoire en 29 minutes, score 6/7/13 (kills/morts/assistances).",
+        "courbe": "La probabilité de victoire de l'équipe est partie de 45 % et a varié entre 45 % "
+                  "et 99 %. Son maximum (99 %) est à la 27e minute, son minimum (45 %) à la 2e "
+                  "minute, et elle est à 97 % à la dernière minute de la courbe (29e).",
+        "variations_courbe": [
+            "8e minute : la probabilité de victoire de l'équipe passe de 68 % à 55 %.",
+            "15e minute : la probabilité de victoire de l'équipe passe de 74 % à 92 %."],
+        "_courbe": {"probabilite_depart_pct": 45, "plus_haut_pct": 99, "plus_bas_pct": 45,
+                    "probabilite_finale_pct": 97, "derniere_minute": 29, "premiere_minute": 2,
+                    "minutes_au_plus_haut": [27], "minutes_au_plus_bas": [2]},
+    }
+
+
+def test_check_claims_flags_a_peak_that_is_not_the_maximum():
+    # erreur réelle du mode hybride v4 : 92 % existe dans les faits, mais n'est pas le pic
+    issues = check_claims("À la 15e minute, elle a atteint son pic à 92 %.", v5_brief())
+    assert issues == ["maximum annoncé à 92 % alors qu'il est à 99 %",
+                      "maximum situé à la 15e minute alors qu'il est à la 27e"]
+    assert check_claims("Son maximum de 99 % est atteint à la 27e minute.", v5_brief()) == []
+
+
+def test_check_claims_flags_wrong_minute_for_the_maximum_and_minimum():
+    issues = check_claims("Elle atteint son maximum de 99 % à la 15e minute.", v5_brief())
+    assert issues == ["maximum situé à la 15e minute alors qu'il est à la 27e"]
+    issues = check_claims("Le minimum de 45 % est à la 8e minute.", v5_brief())
+    assert issues == ["minimum situé à la 8e minute alors qu'il est à la 2e"]
+
+
+def test_check_claims_flags_a_final_value_that_is_not_the_final_value():
+    # erreur réelle : « se terminer à 5 % » alors que 5 % était le minimum, pas la fin
+    brief = v5_brief()
+    assert check_claims("Elle finit à 45 %.", brief) == ["valeur finale annoncée à 45 % alors qu'elle est à 97 %"]
+    assert check_claims("Elle finit à 97 %.", brief) == []
+
+
+def test_check_claims_flags_an_extreme_value_attached_to_a_wrong_minute():
+    # erreur réelle : « chuté jusqu'à 0 % à la 15e minute » alors que les faits ne le placent pas là
+    brief = v5_brief()
+    brief["_courbe"].update(plus_bas_pct=0, minutes_au_plus_bas=[29])
+    issues = check_claims("Elle a chuté jusqu'à 0 % à la 15e minute.", brief)
+    assert issues == ["0 % associé à la 15e minute : valeur extrême que les faits ne placent pas là"]
+    assert check_claims("Elle est à 0 % à la 29e minute.", brief) == []
+
+
+def test_check_claims_accepts_known_jumps_and_blocks_unverifiable_comparisons():
+    brief = v5_brief()
+    ok = ("La probabilité part de 45 %. À la 8e minute, elle passe de 68 % à 55 %, puis à 92 % "
+          "à la 15e minute.")
+    assert check_claims(ok, brief) == []
+    assert check_claims("Elle baisse plus brusquement, restant bas jusqu'à la fin.", brief) == [
+        "affirmation non vérifiable : « jusqu'à la fin »",
+        "affirmation non vérifiable : « restant bas »",
+        "affirmation non vérifiable : « plus brusque »"]
+
+
+def test_private_check_values_are_hidden_from_the_model():
+    brief = v5_brief()
+    for messages in (build_summary_messages(brief), build_messages(brief)):
+        assert '"_courbe"' not in messages[1]["content"]
+        assert "minutes_au_plus_haut" not in messages[1]["content"]
+    # et ils n'élargissent pas la liste des nombres permis : 27 n'apparaît que dans la phrase
+    assert check_numbers("Le 5 est cité.", brief) == [5.0]
+
+
+def test_check_summary_uses_claims_and_retry_gets_the_claim_error():
+    brief = v5_brief()
+    bad = "La probabilité part de 45 % et atteint son pic à 92 % à la 15e minute."
+    assert check_summary(bad, brief) == ["maximum annoncé à 92 % alors qu'il est à 99 %",
+                                         "maximum situé à la 15e minute alors qu'il est à la 27e"]
+    replies = iter([bad, "La probabilité part de 45 % et atteint son maximum de 99 % à la 27e minute."])
+    seen = []
+
+    def fake(messages, **kw):
+        seen.append(messages)
+        return next(replies)
+    text, attempts, issues = generate_summary(brief, chat_fn=fake)
+    assert attempts == 2 and issues == [] and text.endswith("27e minute.")
+    assert "maximum annoncé à 92 %" in seen[1][-1]["content"]
+
+
+def test_check_claims_catches_plus_bas_niveau_and_other_v5_artefacts():
+    # erreurs réelles relevées sur les résumés v5 : « plus bas niveau de 13 % » (le minimum est 5 %),
+    # « (répétition) », « s'est maintenue », « oscille »
+    brief = v5_brief()
+    brief["_courbe"].update(plus_bas_pct=5, minutes_au_plus_bas=[19])
+    issues = check_claims("Elle atteint son plus bas niveau de 13 % à la 15e minute.", brief)
+    assert issues[0] == "minimum annoncé à 13 % alors qu'il est à 5 %"
+    assert check_claims("Son plus bas niveau est de 5 % à la 19e minute.", brief) == []
+    assert check_claims("Elle descend encore plus bas jusqu'à 5 %.", brief) == []
+    text = "22 % à la 6e minute, 16 % à la 6e minute (répétition), puis elle oscille et s'est maintenue."
+    flagged = " ".join(check_claims(text, brief))
+    assert all(w in flagged for w in ("répétition", "oscill", "maintenu"))
+
+
+def test_check_claims_flags_one_minute_given_two_values():
+    # erreur réelle (EUW1_8014251854, restée après la v5.1)
+    brief = v5_brief()
+    text = ("Elle a diminué à 32 % à la 3e minute, 30 % à la 7e minute, 22 % à la 7e minute, "
+            "20 % à la 9e minute.")
+    assert check_claims(text, brief) == ["la 7e minute est citée avec deux valeurs : 30 % et 22 %"]
+    ok = "À la 9e minute, elle passe de 54 % à 44 %. Son minimum de 45 % est à la 2e minute."
+    assert check_claims(ok, brief) == []
