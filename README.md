@@ -3,16 +3,24 @@
 ![CI](https://github.com/romainruan/lol-analyzer/actions/workflows/ci.yml/badge.svg)
 
 Analyse de parties de League of Legends : collecte via l'API Riot, modèle de
-probabilité de victoire (Scikit-learn), moments clés, puis débrief généré par un
-LLM local (Ollama). Le tout conteneurisé avec Docker.
+probabilité de victoire (Scikit-learn), moments clés, débrief généré par le code ou
+par un LLM local (Ollama), suivi de la progression et rapport HTML. Le tout conteneurisé
+avec Docker.
 
 ![Probabilité de victoire d'une partie, minute par minute, avec ses trois moments clés](docs/img/exemple_courbe.png)
 
 *Exemple : probabilité de victoire de l'équipe minute par minute. Les trois plus gros sauts sont les
 « moments clés » du débrief, chacun associé à l'événement de la minute. Un saut n'est pas une cause.*
 
-**Démarrage rapide** (Docker, voir [Avec Docker](#avec-docker)) :
-`docker compose build && docker compose run --rm --no-deps app python -m pytest -q`
+**Démarrage rapide**, avec une [clé Riot](https://developer.riotgames.com) dans `.env` (voir [Démarrage](#démarrage)) :
+
+```bash
+python -m src.run prepare --tier MASTER --max-players 200   # une fois : référence, modèle et repères
+python -m src.run report --riot-id "VotrePseudo#EUW"        # puis results/report.html
+```
+
+Pour vérifier l'installation, sans clé : `python -m pytest -q`, ou avec Docker
+`docker compose build && docker compose run --rm --no-deps app python -m pytest -q`.
 
 > Projet personnel. lol-analyzer isn't endorsed by Riot Games and doesn't reflect the views or opinions
 > of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot
@@ -25,7 +33,8 @@ LLM local (Ollama). Le tout conteneurisé avec Docker.
 2. **Modèle de probabilité de victoire** (Scikit-learn) : écarts d'or, d'XP, de CS, d'objectifs entre les deux équipes, minute par minute, sans fuite de données.
 3. **Courbe et moments clés** d'une partie : les plus gros sauts de probabilité, associés aux événements de la minute.
 4. **Débrief écrit par un LLM local** (Ollama) : le code calcule tout, le modèle ne rédige que le résumé, et chaque texte est contrôlé automatiquement.
-5. Le tout dans **Docker** (application + Ollama) avec **CI GitHub** (tests et construction de l'image).
+5. **Suivi et rapport HTML** : ce qui progresse sur vos dernières parties, vos priorités face aux joueurs de votre poste, et le détail de chaque partie.
+6. Le tout dans **Docker** (application + Ollama) avec **CI GitHub** (tests et construction de l'image).
 
 ## Résultats
 
@@ -63,7 +72,7 @@ fautive si au moins une erreur de chiffre, d'invention ou d'omission a été tro
 Réserves : v4 à v5.1 : mesurés sur les mêmes 12 parties, contrôles ajustés au fil des erreurs. v5.2 : mesurée sur 39 parties nouvelles, contrôles figés avant la mesure ; 4 résumés ont été remplacés par le texte du code après 3 échecs du modèle. Un seul relecteur.
 
 **Pistes** : repères par rang (Grandmaster), percentile de votre moyenne parmi les
-moyennes de joueurs (voir Limites), interprétation du modèle (SHAP), interface Streamlit.
+moyennes de joueurs (voir Limites), choix du modèle par défaut d'après `winprob compare`.
 
 ## Démarrage
 
@@ -73,6 +82,32 @@ pip install -r requirements.txt
 cp .env.example .env        # puis collez votre clé Riot dans .env
 python -m pytest -q         # les tests ne nécessitent pas de clé
 ```
+
+### En deux commandes
+
+```bash
+# une fois : échantillon de référence, modèle de probabilité et repères (200 joueurs, 5 parties : environ 1 h 30)
+python -m src.run prepare --tier MASTER --max-players 200 --per-player 5
+
+# à chaque fois que vous voulez faire le point : télécharge, analyse, écrit les débriefs et le rapport
+python -m src.run report --riot-id "VotrePseudo#EUW" --count 20
+```
+
+Le rapport `results/report.html` tient en un seul fichier, sans ressource externe. Il montre vos tendances, vos
+priorités face aux joueurs de votre poste, vos champions, et la courbe et le débrief de chaque partie. Il ne contient
+pas votre puuid, mais il contient vos identifiants de parties : à partager en connaissance de cause.
+
+![Le haut du rapport HTML, généré sur des parties fictives](docs/img/rapport.png)
+
+*Le haut du rapport, sur des parties fictives produites par `tests/synthetic.py`.*
+
+- Sans `prepare`, le rapport se limite à vos tendances et à vos champions.
+- `report --llm` fait rédiger le résumé de chaque partie par le LLM local. Si Ollama ne répond pas, le débrief est écrit par le code.
+- `--no-collect` réutilise les parties déjà téléchargées, sans appeler Riot.
+- `--platform kr` choisit un autre serveur : la région de routage s'en déduit.
+- `prepare --kind` et `--features` choisissent le modèle (voir section 5), `--label` le nom de l'échantillon.
+
+Les sections suivantes détaillent chaque étape.
 
 ### 1. Collecter des données
 
@@ -85,6 +120,9 @@ python -m src.collect --tier MASTER --per-player 5 --max-players 500 --out data/
 
 # ou une tranche inférieure, par exemple Gold II
 python -m src.collect --tier GOLD --division II --pages 2 --per-player 5
+
+# seulement depuis une date, sur un autre serveur, avec une clé personnelle moins limitée
+python -m src.collect --tier MASTER --since 2026-09-24 --platform kr --min-interval 0.1
 ```
 
 Une partie + sa timeline = 2 requêtes, et la clé de dev autorise ~100 requêtes
@@ -261,6 +299,17 @@ la main `erreurs_chiffres`, `inventions` et `omissions` : vos annotations sont c
 quand vous relancez. Le nombre d'erreurs par débrief permet de comparer les modes et les
 modèles (`--model llama3.1:8b`). Fermez le fichier dans Excel avant de relancer.
 
+### 7. Suivi et rapport
+
+```bash
+python -m src.progress --raw-dir data/raw/me --window 20   # dans le terminal
+python -m src.report --raw-dir data/raw/me                 # results/report.html
+```
+
+Compare vos 20 dernières parties aux 20 précédentes, au poste que vous jouez le plus. Une évolution n'est annoncée que si
+elle sort du bruit normal d'une partie à l'autre : la marge tient compte des 8 statistiques regardées en même temps, pour
+limiter les fausses alertes. Les priorités sont les deux statistiques les plus basses face aux joueurs de votre poste.
+
 ### Avec Docker
 
 Deux services : `app` (le code) et `ollama` (le LLM local). Les dossiers `data/` et
@@ -272,6 +321,7 @@ docker compose run --rm --no-deps app python -m pytest -q  # les tests, sans dé
 docker compose up -d ollama                            # démarre le LLM local
 docker compose exec ollama ollama pull qwen2.5:7b      # télécharge le modèle (une fois, ~4,7 Go)
 docker compose run --rm app python -m src.debrief --limit 3
+docker compose run --rm app python -m src.run report --riot-id "VotrePseudo#EUW" --llm  # toute la chaîne
 docker compose down                                    # arrête les services
 ```
 
@@ -317,6 +367,10 @@ n'est publié, ce qui évite tout conflit avec un Ollama déjà lancé sur votre
   forcément un défaut. Les conseils par poste sont écrits à la main, et leur effet sur le jeu n'est pas mesuré.
 - Les parties d'entraînement viennent de cinq semaines et de trois patchs : la validité sur une autre
   saison n'est pas testée.
+- Le suivi compare des moyennes sans tenir compte des champions joués ni des adversaires : une évolution peut venir d'un
+  changement de champion plutôt que d'un progrès.
+- La chaîne complète est testée sur des parties synthétiques (`tests/synthetic.py`) : leur format imite celui de Riot, mais
+  seules de vraies parties valident les champs rares, comme l'âme de dragon.
 
 ## Licence
 

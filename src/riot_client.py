@@ -14,6 +14,15 @@ from urllib.parse import quote
 import requests
 
 
+# plateforme (serveur de jeu) -> région de routage des parties
+REGION_BY_PLATFORM = {
+    "euw1": "europe", "eun1": "europe", "tr1": "europe", "ru": "europe", "me1": "europe",
+    "na1": "americas", "br1": "americas", "la1": "americas", "la2": "americas",
+    "kr": "asia", "jp1": "asia",
+    "oc1": "sea", "sg2": "sea", "tw2": "sea", "vn2": "sea",
+}
+
+
 class RiotAPIError(Exception):
     """Erreur générique de l'API Riot."""
 
@@ -39,9 +48,11 @@ class RiotClient:
         self.api_key = api_key or os.environ.get("RIOT_API_KEY", "")
         if not self.api_key:
             raise RiotAPIError("RIOT_API_KEY manquante (voir .env.example).")
-        # platform : serveur de jeu (euw1, na1...) ; region : routage (europe, americas, asia)
-        self.platform = platform or os.environ.get("RIOT_PLATFORM", "euw1")
-        self.region = region or os.environ.get("RIOT_REGION", "europe")
+        # platform : serveur de jeu (euw1, na1...) ; region : routage (europe, americas, asia, sea).
+        # Une plateforme demandée explicitement passe avant la région du .env, qui vaut pour une autre plateforme.
+        self.platform = (platform or os.environ.get("RIOT_PLATFORM", "euw1")).lower()
+        derived = REGION_BY_PLATFORM.get(self.platform, "europe")
+        self.region = region or (derived if platform else os.environ.get("RIOT_REGION", derived))
         self.min_interval = min_interval
         self.max_retries = max_retries
         self.session = session or requests.Session()
@@ -87,7 +98,8 @@ class RiotClient:
             "/riot/account/v1/accounts/by-riot-id/"
             f"{quote(game_name, safe='')}/{quote(tag_line, safe='')}"
         )
-        return self._get(self.region, path)["puuid"]
+        # les comptes ne sont pas servis par la région « sea »
+        return self._get("asia" if self.region == "sea" else self.region, path)["puuid"]
 
     def get_match_ids(
         self,

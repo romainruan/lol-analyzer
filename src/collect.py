@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+from datetime import UTC, datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -66,17 +67,23 @@ def collect_match(client: RiotClient, match_id: str, raw_dir: Path) -> bool:
     return True
 
 
-def collect_for_puuid(client: RiotClient, puuid: str, raw_dir: Path, count: int, start: int = 0) -> int:
+def date_to_timestamp(day: str) -> int:
+    """`2026-09-24` -> secondes depuis 1970 (UTC), le format attendu par Riot."""
+    return int(datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=UTC).timestamp())
+
+
+def collect_for_puuid(client: RiotClient, puuid: str, raw_dir: Path, count: int, start: int = 0,
+                      start_time: int | None = None) -> int:
     """Télécharge `count` parties à partir de la `start`-ième (0 = la plus récente)."""
     new = 0
-    for match_id in client.get_match_ids(puuid, start=start, count=count):
+    for match_id in client.get_match_ids(puuid, start=start, count=count, start_time=start_time):
         if collect_match(client, match_id, raw_dir):
             new += 1
             print(f"  + {match_id}")
     return new
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     load_dotenv()
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--riot-id", help='Votre Riot ID, ex. "Pseudo#EUW"')
@@ -90,12 +97,18 @@ def main() -> None:
     p.add_argument("--max-players", type=int, default=200, help="Joueurs tirés au sort (Master+)")
     p.add_argument("--per-player", type=int, default=5, help="Parties par joueur échantillonné")
     p.add_argument("--out", help="Dossier de sortie (défaut : data/raw/me ou data/raw/sample)")
-    args = p.parse_args()
+    p.add_argument("--platform", help="Serveur de jeu, ex. euw1, na1, kr (défaut : RIOT_PLATFORM dans .env)")
+    p.add_argument("--since", metavar="AAAA-MM-JJ", help="Seulement les parties jouées depuis cette date")
+    p.add_argument("--min-interval", type=float, default=1.25,
+                   help="Secondes entre deux requêtes (1,25 convient à une clé de dev ; à réduire avec une clé "
+                        "personnelle ou de production)")
+    args = p.parse_args(argv)
 
     if not args.riot_id and not args.tier:
         p.error("Donnez --riot-id ou --tier.")
 
-    client = RiotClient()
+    client = RiotClient(platform=args.platform, min_interval=args.min_interval)
+    start_time = date_to_timestamp(args.since) if args.since else None
 
     if args.riot_id:
         raw_dir = Path(args.out or "data/raw/me")
@@ -104,7 +117,8 @@ def main() -> None:
         raw_dir.mkdir(parents=True, exist_ok=True)
         # utilisé plus tard pour retrouver vos parties (data/ est ignoré par git)
         (raw_dir / "puuid.txt").write_text(puuid, encoding="utf-8")
-        total = collect_for_puuid(client, puuid, raw_dir, args.count, args.start)
+        (raw_dir / "riot_id.txt").write_text(args.riot_id, encoding="utf-8")
+        total = collect_for_puuid(client, puuid, raw_dir, args.count, args.start, start_time)
         print(f"{total} nouvelles parties dans {raw_dir}")
         return
 
@@ -126,7 +140,7 @@ def main() -> None:
             print(f"[{i}/{len(entries)}] entrée sans identifiant exploitable, ignorée")
             continue
         print(f"[{i}/{len(entries)}] joueur suivant")
-        total += collect_for_puuid(client, puuid, raw_dir, args.per_player)
+        total += collect_for_puuid(client, puuid, raw_dir, args.per_player, start_time=start_time)
     print(f"{total} nouvelles parties dans {raw_dir}")
 
 

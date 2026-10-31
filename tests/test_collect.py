@@ -49,6 +49,21 @@ def test_collect_for_puuid_can_skip_the_most_recent_games(tmp_path):
     assert calls == [("p1", 100, 100)]
 
 
+def test_since_is_given_to_riot_as_a_timestamp(tmp_path):
+    from src.collect import collect_for_puuid, date_to_timestamp
+
+    assert date_to_timestamp("1970-01-02") == 86_400
+    calls = []
+
+    class Client:
+        def get_match_ids(self, puuid, start=0, count=20, start_time=None):
+            calls.append(start_time)
+            return []
+
+    collect_for_puuid(Client(), "p1", tmp_path, count=5, start_time=86_400)
+    assert calls == [86_400]
+
+
 # ----------------------------------------------------------------------------- interruption
 def test_timeline_interrupted_while_writing_is_downloaded_again(tmp_path, monkeypatch):
     import json
