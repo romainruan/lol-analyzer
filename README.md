@@ -39,7 +39,8 @@ Pour vérifier l'installation, sans clé : `python -m pytest -q`, ou avec Docker
 ## Résultats
 
 **Modèle de probabilité** : environ 3 200 parties de joueurs Master, collectées du 24 septembre au
-31 octobre 2026 (patchs 16.19 à 16.21), régression logistique sur les écarts d'équipe (AUC par minute).
+31 octobre 2026 (patchs 16.19 à 16.21), régression logistique sur les écarts d'équipe (AUC par minute). Ce tableau
+mesure l'ancien modèle `lineaire` ; le modèle par défaut actuel est comparé juste après.
 
 | Minute | 5 | 10 | 15 | 20 | 25 |
 |---|---|---|---|---|---|
@@ -221,7 +222,9 @@ Chaque moment clé indique ses `ecarts` : ce qui a réellement bougé sur la min
 vu de votre équipe. Ce sont des faits de la partie, sans aucun modèle.
 
 **Choisir le modèle.** Trois types de modèle et deux jeux de variables sont disponibles (`train --kind` et
-`--features`). `lineaire` reste le choix par défaut, car c'est la référence des mesures plus haut :
+`--features`). `monotone` + `etendu` est le choix par défaut : il ne perd rien de notable face à `lineaire`, la
+référence des mesures plus haut, et lui seul explique les sauts de la courbe avec toutes les variables. Un modèle déjà
+enregistré reste utilisé tel quel jusqu'au prochain `train`, à lancer après avoir reconstruit le jeu de données :
 
 | `--kind` | Poids de chaque variable | Intérêt |
 |---|---|---|
@@ -230,7 +233,7 @@ vu de votre équipe. Ce sont des faits de la partie, sans aucun modèle.
 | `monotone` | comme `phases`, sans poids négatif | un avantage ne fait jamais baisser la probabilité |
 
 `--features etendu` ajoute les inhibiteurs, le Dragon Ancien, l'âme de dragon, Atakhan, les kills des 2 dernières
-minutes et la part de l'or total : reconstruisez le jeu de données avec `build_dataset` pour en disposer.
+minutes et la part de l'or total ; `--features base` s'en passe.
 
 ```bash
 python -m src.winprob compare --data data/dataset_all.csv --time-split 0.2  # compare tous ces modèles
