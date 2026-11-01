@@ -39,7 +39,8 @@ Pour vérifier l'installation, sans clé : `python -m pytest -q`, ou avec Docker
 ## Résultats
 
 **Modèle de probabilité** : environ 3 200 parties de joueurs Master, collectées du 24 septembre au
-31 octobre 2026 (patchs 16.19 à 16.21), régression logistique sur les écarts d'équipe (AUC par minute).
+31 octobre 2026 (patchs 16.19 à 16.21), régression logistique sur les écarts d'équipe (AUC par minute). Ce tableau
+mesure l'ancien modèle `lineaire` ; le modèle par défaut actuel est comparé juste après.
 
 | Minute | 5 | 10 | 15 | 20 | 25 |
 |---|---|---|---|---|---|
@@ -57,6 +58,23 @@ l'écart d'or par lane ne font pas mieux de façon significative : un modèle li
 Réserves : un seul rang (Master), cinq semaines de données et trois patchs (dont un de 43 parties, utilisé
 seulement à l'entraînement), tests par patch limités à deux patchs.
 
+**Comparaison des modèles de courbe** : mêmes données (3 205 parties, `winprob compare`). Le gain est la log-loss
+gagnée sur `lineaire`, avec son intervalle à 95 % par partie ; l'écart de calibration est donné en points.
+
+| Modèle | Validation croisée : gain | Écart | 641 parties récentes : gain | Écart |
+|---|---|---|---|---|
+| `lineaire` | référence | 0,7 | référence | 2,0 |
+| `phases` | +0,0002 (-0,0004 à +0,0008) | 0,9 | +0,0005 (-0,0006 à +0,0015) | 2,5 |
+| `monotone` | -0,0003 (-0,0022 à +0,0014) | 0,8 | -0,0026 (-0,0066 à +0,0006) | 2,4 |
+| `monotone` + `etendu` | +0,0018 (-0,0001 à +0,0036) | 0,8 | +0,0010 (-0,0024 à +0,0041) | 2,7 |
+
+Aucun modèle ne se détache au global, et le score ne progresse plus au-delà d'environ 1 000 parties d'entraînement
+(`learning-curve`, modèle `monotone` + `etendu`). Ce modèle obtient une AUC à 0,01 près de celle du tableau ci-dessus,
+sans aucun poids négatif. Par tranche de probabilité et par phase, sa
+calibration s'écarte le plus de la réalité entre 2 et 5 minutes (55,5 % annoncés, 51,5 % observés) et entre 26 et
+40 minutes (23,4 % annoncés, 26,8 % observés). Réserve : sur 26 à 40 minutes, son gain en validation croisée
+(+0,0104, de +0,0011 à +0,0187) n'est pas confirmé sur les parties récentes (de -0,0086 à +0,0212).
+
 **Fidélité des débriefs** : 12 parties, relues à la main (`docs/review.csv`). Une ligne compte comme
 fautive si au moins une erreur de chiffre, d'invention ou d'omission a été trouvée.
 
@@ -71,8 +89,14 @@ fautive si au moins une erreur de chiffre, d'invention ou d'omission a été tro
 
 Réserves : v4 à v5.1 : mesurés sur les mêmes 12 parties, contrôles ajustés au fil des erreurs. v5.2 : mesurée sur 39 parties nouvelles, contrôles figés avant la mesure ; 4 résumés ont été remplacés par le texte du code après 3 échecs du modèle. Un seul relecteur.
 
+**Contrôle v5.3 rejoué sans LLM** (`debrief --recheck`, 46 résumés v5.1 et v5.2) : 18 signalés, dont les 3 sur 3
+relus avec une erreur et 13 sur 40 relus sans erreur. 14 des 18 signalements visent seulement des formules comme
+« reste à » ou « se stabilise », que les faits fournis au modèle ne permettent pas de vérifier. Un signalement
+provoque une nouvelle tentative, puis le texte du code. Réserve : peu d'erreurs relues, et des règles écrites après
+avoir vu ces résumés.
+
 **Pistes** : repères par rang (Grandmaster), percentile de votre moyenne parmi les
-moyennes de joueurs (voir Limites), choix du modèle par défaut d'après `winprob compare`.
+moyennes de joueurs (voir Limites).
 
 ## Démarrage
 
@@ -198,7 +222,9 @@ Chaque moment clé indique ses `ecarts` : ce qui a réellement bougé sur la min
 vu de votre équipe. Ce sont des faits de la partie, sans aucun modèle.
 
 **Choisir le modèle.** Trois types de modèle et deux jeux de variables sont disponibles (`train --kind` et
-`--features`). `lineaire` reste le choix par défaut, car c'est lui qui est mesuré plus haut :
+`--features`). `monotone` + `etendu` est le choix par défaut : il ne perd rien de notable face à `lineaire`, la
+référence des mesures plus haut, et lui seul explique les sauts de la courbe avec toutes les variables. Un modèle déjà
+enregistré reste utilisé tel quel jusqu'au prochain `train`, à lancer après avoir reconstruit le jeu de données :
 
 | `--kind` | Poids de chaque variable | Intérêt |
 |---|---|---|
@@ -207,7 +233,7 @@ vu de votre équipe. Ce sont des faits de la partie, sans aucun modèle.
 | `monotone` | comme `phases`, sans poids négatif | un avantage ne fait jamais baisser la probabilité |
 
 `--features etendu` ajoute les inhibiteurs, le Dragon Ancien, l'âme de dragon, Atakhan, les kills des 2 dernières
-minutes et la part de l'or total : reconstruisez le jeu de données avec `build_dataset` pour en disposer.
+minutes et la part de l'or total ; `--features base` s'en passe.
 
 ```bash
 python -m src.winprob compare --data data/dataset_all.csv --time-split 0.2  # compare tous ces modèles

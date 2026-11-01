@@ -198,8 +198,26 @@ def test_free_model_warns_that_it_cannot_explain_the_jumps(project, capsys):
 
     collect.main(["--tier", "MASTER", "--max-players", "70", "--per-player", "1"])
     build_dataset.main(["--all-minutes", "--out", "data/d.csv"])
-    winprob.main(["train", "--data", "data/d.csv", "--model", "results/m.joblib"])
+    winprob.main(["train", "--data", "data/d.csv", "--model", "results/m.joblib", "--kind", "lineaire",
+                  "--features", "base"])
     assert "--kind monotone" in capsys.readouterr().out
+
+
+def test_default_model_is_monotone_with_extended_features(project, capsys):
+    import joblib
+
+    from src import build_dataset, collect, winprob
+
+    prepare()  # le modèle de `prepare`, sans option
+    model = joblib.load("results/curve_model.joblib")
+    assert winprob.has_positive_effects(model)
+    assert "souls_diff@25" in model.feature_names_in_
+
+    collect.main(["--tier", "MASTER", "--max-players", "70", "--per-player", "1"])
+    build_dataset.main(["--all-minutes", "--out", "data/d.csv"])
+    capsys.readouterr()
+    winprob.main(["train", "--data", "data/d.csv", "--model", "results/m.joblib"])
+    assert "Modèle « monotone », variables « etendu »" in capsys.readouterr().out
 
 
 def test_progress_command_prints_trends_and_priorities(project, capsys):

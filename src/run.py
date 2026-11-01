@@ -91,8 +91,10 @@ def main(argv: list[str] | None = None) -> None:
     a.add_argument("--max-players", type=int, default=500, help="joueurs tirés au sort (Master et au-delà)")
     a.add_argument("--per-player", type=int, default=5, help="parties par joueur")
     a.add_argument("--label", help="nom de l'échantillon dans les phrases (défaut : le tier)")
-    a.add_argument("--kind", choices=["lineaire", "phases", "monotone"], default="lineaire", help="type de modèle")
-    a.add_argument("--features", choices=list(winprob.FEATURE_SETS), default="base", help="variables du modèle")
+    a.add_argument("--kind", choices=["lineaire", "phases", "monotone"], default=winprob.DEFAULT_KIND,
+                   help="type de modèle")
+    a.add_argument("--features", choices=list(winprob.FEATURE_SETS), default=winprob.DEFAULT_FEATURES,
+                   help="variables du modèle")
     a.set_defaults(func=prepare)
 
     b = sub.add_parser("report", parents=[riot], help="vos parties : analyse, débriefs et rapport HTML")

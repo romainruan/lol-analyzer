@@ -45,6 +45,7 @@ EARLY_MINUTE = 5  # avant, le modèle prédit mal (AUC de 0,65 à 0,68 à 5 minu
 PHASES = ((2, 5), (6, 10), (11, 15), (16, 25), (26, MAX_MINUTE))
 KNOTS = (5, 10, 15, 25, MAX_MINUTE)  # repères des modèles par phases : un poids par variable à chaque repère
 FEATURE_SETS = {"base": BASE_FEATURES, "etendu": EXTENDED_FEATURES}
+DEFAULT_KIND, DEFAULT_FEATURES = "monotone", "etendu"  # choisis d'après `compare` sur 3 205 parties réelles (README)
 # (type de modèle, variables) comparés par `winprob compare` ; le premier sert de référence
 CANDIDATES = {
     "lineaire": ("lineaire", BASE_FEATURES),
@@ -661,10 +662,10 @@ def main(argv: list[str] | None = None) -> None:
                    help="teste aussi chaque patch (300 parties au moins) en entraînant sur les autres")
     t.add_argument("--calibration", action="store_true",
                    help="mesure aussi la calibration par phase de jeu (curve_calibration.csv)")
-    t.add_argument("--kind", choices=["lineaire", "phases", "monotone"], default="lineaire",
+    t.add_argument("--kind", choices=["lineaire", "phases", "monotone"], default=DEFAULT_KIND,
                    help="lineaire : poids en ligne droite avec le temps ; phases : un poids par phase de jeu ; "
                         "monotone : par phases, et aucun avantage ne fait baisser la probabilité")
-    t.add_argument("--features", choices=list(FEATURE_SETS), default="base",
+    t.add_argument("--features", choices=list(FEATURE_SETS), default=DEFAULT_FEATURES,
                    help="etendu ajoute inhibiteurs, Dragon Ancien, âme, Atakhan, kills récents, part de l'or")
     t.set_defaults(func=cmd_train)
 
@@ -679,8 +680,8 @@ def main(argv: list[str] | None = None) -> None:
 
     lc = sub.add_parser("learning-curve", help="le score progresse-t-il encore avec plus de parties ?")
     lc.add_argument("--data", default="data/dataset_all.csv")
-    lc.add_argument("--kind", choices=["lineaire", "phases", "monotone"], default="lineaire")
-    lc.add_argument("--features", choices=list(FEATURE_SETS), default="base")
+    lc.add_argument("--kind", choices=["lineaire", "phases", "monotone"], default=DEFAULT_KIND)
+    lc.add_argument("--features", choices=list(FEATURE_SETS), default=DEFAULT_FEATURES)
     lc.set_defaults(func=cmd_learning_curve)
 
     a = sub.add_parser("analyze", help="courbe et moments clés de vos parties")
